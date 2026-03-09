@@ -109,6 +109,55 @@ sudo ufw reload
 
 ---
 
+## Atualizar o projeto (git pull) sem perder o .env do servidor
+
+O repositório **não** inclui `.env` nem a pasta `server/uploads` (estão no `.gitignore`). Para garantir que **as variáveis de configuração nunca são sobrescritas**, use no servidor o script **`update-on-server.sh`**.
+
+### Forma recomendada (script que preserva o .env)
+
+No VPS, na pasta do projeto:
+
+```bash
+chmod +x update-on-server.sh
+./update-on-server.sh
+```
+
+O script:
+1. Faz **backup** do `.env` do servidor
+2. Executa **git pull**
+3. **Restaura** o `.env` do backup (mesmo que algo o tivesse alterado)
+4. Reconstrui e reinicia o Docker
+
+Assim as variáveis de configuração (`.env`) **nunca** são substituídas.
+
+### Se preferir fazer manualmente
+
+- O repositório não inclui `.env` (está no `.gitignore`), por isso em condições normais `git pull` não o altera.
+- Se um dia tiver commitado `.env` por engano, remova-o do Git no seu PC (uma vez):
+  ```bash
+  git rm --cached .env
+  git commit -m "Deixar de versionar .env"
+  git push
+  ```
+  E use sempre **`update-on-server.sh`** no servidor para ter a certeza de que o `.env` não é sobrescrito.
+
+---
+
+## Nginx (config fica fora do projeto)
+
+A configuração do Nginx fica **no servidor**, em pastas do sistema (ex.: `/etc/nginx/sites-available/`), **não** na pasta do projeto. Por isso:
+
+- **`git pull`** não altera o Nginx — podes atualizar o código à vontade.
+- Para alterar o Nginx (domínio, timeouts, SSL, etc.), editas **no VPS** o ficheiro do teu site, por exemplo:
+  ```bash
+  sudo nano /etc/nginx/sites-available/vdyou
+  ```
+  Depois: `sudo nginx -t` e `sudo systemctl reload nginx`.
+
+No repositório existe o ficheiro **`nginx-vdyou-example.conf`** só como **referência**. Quando precisares de ajustar o Nginx no servidor (por exemplo timeouts para a transcrição), podes copiar as linhas desse exemplo para o teu ficheiro em `/etc/nginx/sites-available/`.
+
+---
+
 ## Comandos úteis
 
 | Ação | Comando |
