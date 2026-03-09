@@ -279,7 +279,7 @@ app.post('/transcribe', express.json(), async (req, res) => {
         outputInSrt: true,
         outputInJson: false,
         wordTimestamps: false,
-        timestamps_length: 20,
+        timestamps_length: 8,
         splitOnWord: true,
       },
     });

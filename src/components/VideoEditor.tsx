@@ -88,6 +88,58 @@ function getClipName(c: Clip, fallback?: string) {
   return fallback ?? 'Clip';
 }
 
+const CAPTION_TOLERANCE_SEC = 0.04;
+
+function CaptionOverlay({
+  videoRef,
+  clip,
+  styleProps,
+}: {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  clip: Clip;
+  styleProps: React.CSSProperties | null;
+}) {
+  const [displayText, setDisplayText] = useState('');
+  const segs = clip?.captionSegments;
+  const hasSegments = Array.isArray(segs) && segs.length > 0;
+
+  useEffect(() => {
+    if (!styleProps || !clip) return;
+    if (hasSegments && segs) {
+      const clipStart = clip.start;
+      let rafId: number;
+      const tick = () => {
+        const video = videoRef?.current;
+        if (video && typeof video.currentTime === 'number') {
+          const timeInClip = video.currentTime - clipStart;
+          const seg = segs.find(
+            (s) => timeInClip >= s.start - CAPTION_TOLERANCE_SEC && timeInClip < s.end + CAPTION_TOLERANCE_SEC
+          );
+          const next = seg?.text ?? '';
+          setDisplayText((prev) => (next === prev ? prev : next));
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(rafId);
+    }
+    setDisplayText(clip.captionText?.trim() ?? '');
+    return undefined;
+  }, [clip?.id, clip?.start, clip?.captionText, styleProps, videoRef, hasSegments, segs]);
+
+  if (!styleProps || !displayText) return null;
+  return (
+    <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-6 z-10 px-4">
+      <span
+        className="text-xl font-medium break-words text-center max-w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+        style={styleProps}
+      >
+        {displayText}
+      </span>
+    </div>
+  );
+}
+
 export interface VideoEditorHandle {
   getProjectData: () => ProjectData;
   loadProjectData: (data: ProjectData) => void;
@@ -2030,35 +2082,14 @@ function VideoEditorInner(
               />
               )}
             </div>
-            {/* Overlay de legenda no player (segmentos extraídos do vídeo ou texto único) */}
-            {playingClipObj?.captionStyle && playingClipObj.captionStyle !== 'none' && (() => {
-              const styleProps = getCaptionStyleProps(playingClipObj.captionStyle!);
-              if (!styleProps) return null;
-              const segs = playingClipObj.captionSegments;
-              const hasSegments = Array.isArray(segs) && segs.length > 0;
-              let displayText = '';
-              if (hasSegments) {
-                const at = getClipAtTime(currentTime);
-                if (at && at.clip.id === playingClipObj.id) {
-                  const timeInClip = at.sourceTime - at.clip.start;
-                  const seg = segs.find((s) => s.start <= timeInClip + 0.15 && s.end >= timeInClip - 0.15);
-                  if (seg) displayText = seg.text;
-                }
-              } else if (playingClipObj.captionText?.trim()) {
-                displayText = playingClipObj.captionText.trim();
-              }
-              if (!displayText) return null;
-              return (
-                <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-6 z-10 px-4">
-                  <span
-                    className="text-xl font-medium break-words text-center max-w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-                    style={styleProps}
-                  >
-                    {displayText}
-                  </span>
-                </div>
-              );
-            })()}
+            {/* Overlay de legenda no player (sincronizado ao tempo real do vídeo para precisão) */}
+            {playingClipObj?.captionStyle && playingClipObj.captionStyle !== 'none' && (
+              <CaptionOverlay
+                videoRef={videoRef}
+                clip={playingClipObj}
+                styleProps={getCaptionStyleProps(playingClipObj.captionStyle!)}
+              />
+            )}
             <AnimatePresence>
               {isDragOver && (
                 <motion.div
