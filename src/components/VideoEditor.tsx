@@ -93,24 +93,30 @@ const CAPTION_TOLERANCE_SEC = 0.04;
 function CaptionOverlay({
   videoRef,
   clip,
+  styleProps,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   clip: Clip;
+  styleProps: React.CSSProperties | null;
 }) {
   const [displayText, setDisplayText] = useState('');
   const segs = clip?.captionSegments;
   const hasSegments = Array.isArray(segs) && segs.length > 0;
+  const segsRef = useRef(segs);
+  segsRef.current = segs;
+  const clipStartRef = useRef(clip?.start ?? 0);
+  clipStartRef.current = clip?.start ?? 0;
 
   useEffect(() => {
     if (!clip) return;
-    if (hasSegments && segs) {
-      const clipStart = clip.start;
+    if (hasSegments && segs?.length) {
       let rafId: number;
       const tick = () => {
         const video = videoRef?.current;
         if (video && typeof video.currentTime === 'number') {
-          const timeInClip = video.currentTime - clipStart;
-          const seg = segs.find(
+          const timeInClip = video.currentTime - clipStartRef.current;
+          const currentSegs = segsRef.current;
+          const seg = currentSegs?.find(
             (s) => timeInClip >= s.start - CAPTION_TOLERANCE_SEC && timeInClip < s.end + CAPTION_TOLERANCE_SEC
           );
           const next = seg?.text ?? '';
@@ -123,18 +129,9 @@ function CaptionOverlay({
     }
     setDisplayText(clip.captionText?.trim() ?? '');
     return undefined;
-  }, [clip?.id, clip?.start, clip?.captionText, videoRef, hasSegments, segs]);
+  }, [clip?.id, clip?.start, clip?.captionText, videoRef, hasSegments, segs?.length]);
 
-  if (!displayText) return null;
-
-  const baseStyle: React.CSSProperties = {
-    color: '#ffffff',
-    fontWeight: 700,
-    textShadow: '0 0 4px rgba(0,0,0,0.9)',
-  };
-  const styleProps =
-    getCaptionStyleProps(clip.captionStyle as any) || baseStyle;
-
+  if (!styleProps || !displayText) return null;
   return (
     <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-6 z-10 px-4">
       <span
@@ -2089,10 +2086,14 @@ function VideoEditorInner(
               />
               )}
             </div>
-            {/* Overlay de legenda no player (sincronizado ao tempo real do vídeo para precisão) */}
-            {(playingClipObj?.captionSegments?.length ||
-              playingClipObj?.captionText?.trim()) && (
-              <CaptionOverlay videoRef={videoRef} clip={playingClipObj} />
+            {/* Overlay de legenda no player (sincronizado ao tempo real do vídeo; exige estilo escolhido para mostrar cores) */}
+            {playingClipObj?.captionStyle && playingClipObj.captionStyle !== 'none' &&
+             (playingClipObj?.captionSegments?.length || playingClipObj?.captionText?.trim()) && (
+              <CaptionOverlay
+                videoRef={videoRef}
+                clip={playingClipObj}
+                styleProps={getCaptionStyleProps(playingClipObj.captionStyle!)}
+              />
             )}
             <AnimatePresence>
               {isDragOver && (
