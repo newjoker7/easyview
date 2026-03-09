@@ -11,9 +11,10 @@ if [ -f .env ]; then
   echo "[ok] Backup de .env guardado em .env.backup.server"
 fi
 
-# 2) Atualizar código do repositório
+# 2) Atualizar código do repositório (pull do branch atual a partir de origin)
 echo "[ok] A fazer git pull..."
-git pull
+BRANCH=$(git branch --show-current)
+git pull origin "$BRANCH"
 
 # 3) Restaurar .env do servidor (nunca usar o do repositório)
 if [ -f .env.backup.server ]; then
@@ -26,6 +27,8 @@ if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
   echo "[ok] A reconstruir e a reiniciar Docker..."
   docker compose build --no-cache
   docker compose up -d
+  echo "[ok] A reiniciar os containers para carregar os ficheiros novos..."
+  docker compose restart
   echo "[ok] Docker em execução."
 fi
 
