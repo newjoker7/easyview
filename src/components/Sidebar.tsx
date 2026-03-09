@@ -45,7 +45,7 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
 
   const navItems = [
-    { icon: Plus, label: 'Novo Projeto1', onClick: onNewProject, always: true, color: 'text-emerald-400' },
+    { icon: Plus, label: 'Novo Projeto', onClick: onNewProject, always: true, color: 'text-emerald-400' },
     { icon: FolderOpen, label: 'Meus Projetos', onClick: onOpenProjects, always: true, color: 'text-sky-400' },
   ];
 

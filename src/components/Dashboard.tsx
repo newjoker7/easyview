@@ -72,7 +72,7 @@ export function Dashboard() {
   const handleNewProject = useCallback(async () => {
     if (!user) return;
     const doCreate = async () => {
-      const name = prompt('Nome do projeto:');
+      const name = prompt('Nome do projeto11:');
       if (!name?.trim()) return;
       try {
         const id = await createProject(user.uid, name.trim());
