@@ -89,6 +89,8 @@ function getClipName(c: Clip, fallback?: string) {
 }
 
 const CAPTION_TOLERANCE_SEC = 0.04;
+// Pequeno adiantamento para a legenda acompanhar melhor a fala
+const CAPTION_SHIFT_SEC = 0.15;
 
 function CaptionOverlay({
   videoRef,
@@ -114,7 +116,7 @@ function CaptionOverlay({
       const tick = () => {
         const video = videoRef?.current;
         if (video && typeof video.currentTime === 'number') {
-          const timeInClip = video.currentTime - clipStartRef.current;
+          const timeInClip = video.currentTime - clipStartRef.current + CAPTION_SHIFT_SEC;
           const currentSegs = segsRef.current;
           const seg = currentSegs?.find(
             (s) => timeInClip >= s.start - CAPTION_TOLERANCE_SEC && timeInClip < s.end + CAPTION_TOLERANCE_SEC
