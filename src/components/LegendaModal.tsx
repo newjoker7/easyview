@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader2 } from 'lucide-react';
 import type { CaptionStyleId } from './VideoEditor';
@@ -44,7 +44,9 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
   const [segments, setSegments] = useState<CaptionSegment[]>(initialSegments);
   const [hoverId, setHoverId] = useState<CaptionStyleId | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState(0);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -54,6 +56,15 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
       setExtractError(null);
     }
   }, [open, initialText, selectedStyle, initialSegments]);
+
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const previewId = hoverId ?? style;
   const previewPreset = previewId === 'none' ? null : CAPTION_PRESETS.find((p) => p.id === previewId) ?? CAPTION_PRESETS[0];
@@ -66,6 +77,19 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
     if (!clipUrl) return;
     setExtracting(true);
     setExtractError(null);
+    setExtractProgress(0);
+
+    const durationSec = clipEnd != null && clipStart != null && clipEnd > clipStart
+      ? clipEnd - clipStart
+      : 60;
+    const estimatedMs = Math.max(15000, Math.min(600000, durationSec * 3000));
+    const stepMs = 500;
+    const stepPct = (stepMs / estimatedMs) * 90;
+
+    progressIntervalRef.current = setInterval(() => {
+      setExtractProgress((p) => Math.min(90, p + stepPct));
+    }, stepMs);
+
     try {
       const { segments: segs } = await transcribeVideo(clipUrl, clipStart, clipEnd);
       setSegments(segs || []);
@@ -74,7 +98,13 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
       setExtractError(e instanceof Error ? e.message : 'Falha ao extrair legenda.');
       setSegments([]);
     } finally {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      setExtractProgress(100);
       setExtracting(false);
+      setTimeout(() => setExtractProgress(0), 400);
     }
   };
 
@@ -122,9 +152,19 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
                 disabled={extracting}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-800/80 border border-emerald-600/60 text-emerald-100 font-medium hover:bg-emerald-700/80 disabled:opacity-60 transition-all"
               >
-                {extracting ? <Loader2 size={18} className="animate-spin" /> : null}
-                {extracting ? 'Extraindo…' : 'Extrair legenda do vídeo'}
+                {extracting ? <Loader2 size={18} className="animate-spin shrink-0" /> : null}
+                {extracting ? `A extrair… ${Math.round(extractProgress)}%` : 'Extrair legenda do vídeo'}
               </button>
+              {extracting && (
+                <div className="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-emerald-500 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${extractProgress}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              )}
               {extractError && <p className="text-sm text-rose-400">{extractError}</p>}
               {hasSegments && !extractError && <p className="text-sm text-zinc-300">{segments.length} trecho(s) extraído(s). Escolha o estilo e clique em Aplicar.</p>}
             </div>
