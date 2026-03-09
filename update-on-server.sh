@@ -1,15 +1,18 @@
 #!/bin/bash
 # Atualiza o projeto no servidor com git pull SEM sobrescrever .env nem server/uploads.
 # Uso: no VPS, na pasta do projeto:
-#   ./update-on-server.sh         → atualiza código e faz rebuild completo do Docker
-#   ./update-on-server.sh --no-build → atualiza código e só reinicia os containers (mais rápido)
+#   ./update-on-server.sh                 → atualiza código e faz rebuild completo do Docker
+#   ./update-on-server.sh --no-build      → atualiza código e só reinicia os containers (mais rápido)
+#   ./update-on-server.sh --git-only      → **apenas** atualiza o código (git), sem build nem restart (útil para ajustes locais / só front)
 
 set -e
 cd "$(dirname "$0")"
 
 SKIP_BUILD=false
+GIT_ONLY=false
 for arg in "$@"; do
   if [ "$arg" = "--no-build" ]; then SKIP_BUILD=true; fi
+  if [ "$arg" = "--git-only" ]; then GIT_ONLY=true; fi
 done
 
 # 1) Backup do .env (variáveis de configuração do servidor)
@@ -30,19 +33,23 @@ if [ -f .env.backup.server ]; then
   echo "[ok] .env restaurado (configuração do servidor mantida)"
 fi
 
-# 4) Docker: rebuild (ou só reiniciar se --no-build)
-if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
-  if [ "$SKIP_BUILD" = true ]; then
-    echo "[ok] A reiniciar os containers (sem rebuild)..."
-    docker compose up -d
-    docker compose restart
-  else
-    echo "[ok] A reconstruir e a reiniciar Docker..."
-    docker compose build --no-cache
-    docker compose up -d
-    docker compose restart
+# 4) Docker: rebuild / restart (a não ser que seja só git)
+if [ "$GIT_ONLY" != true ]; then
+  if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
+    if [ "$SKIP_BUILD" = true ]; then
+      echo "[ok] A reiniciar os containers (sem rebuild)..."
+      docker compose up -d
+      docker compose restart
+    else
+      echo "[ok] A reconstruir e a reiniciar Docker..."
+      docker compose build --no-cache
+      docker compose up -d
+      docker compose restart
+    fi
+    echo "[ok] Docker em execução."
   fi
-  echo "[ok] Docker em execução."
+else
+  echo "[ok] Modo --git-only: não foi feito nenhum build nem restart de Docker."
 fi
 
 echo "[ok] Atualização concluída. As variáveis de configuração (.env) não foram alteradas."
