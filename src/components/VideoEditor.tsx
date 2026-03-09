@@ -93,18 +93,16 @@ const CAPTION_TOLERANCE_SEC = 0.04;
 function CaptionOverlay({
   videoRef,
   clip,
-  styleProps,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   clip: Clip;
-  styleProps: React.CSSProperties | null;
 }) {
   const [displayText, setDisplayText] = useState('');
   const segs = clip?.captionSegments;
   const hasSegments = Array.isArray(segs) && segs.length > 0;
 
   useEffect(() => {
-    if (!styleProps || !clip) return;
+    if (!clip) return;
     if (hasSegments && segs) {
       const clipStart = clip.start;
       let rafId: number;
@@ -125,9 +123,18 @@ function CaptionOverlay({
     }
     setDisplayText(clip.captionText?.trim() ?? '');
     return undefined;
-  }, [clip?.id, clip?.start, clip?.captionText, styleProps, videoRef, hasSegments, segs]);
+  }, [clip?.id, clip?.start, clip?.captionText, videoRef, hasSegments, segs]);
 
-  if (!styleProps || !displayText) return null;
+  if (!displayText) return null;
+
+  const baseStyle: React.CSSProperties = {
+    color: '#ffffff',
+    fontWeight: 700,
+    textShadow: '0 0 4px rgba(0,0,0,0.9)',
+  };
+  const styleProps =
+    getCaptionStyleProps(clip.captionStyle as any) || baseStyle;
+
   return (
     <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-6 z-10 px-4">
       <span
@@ -2083,12 +2090,9 @@ function VideoEditorInner(
               )}
             </div>
             {/* Overlay de legenda no player (sincronizado ao tempo real do vídeo para precisão) */}
-            {playingClipObj?.captionStyle && playingClipObj.captionStyle !== 'none' && (
-              <CaptionOverlay
-                videoRef={videoRef}
-                clip={playingClipObj}
-                styleProps={getCaptionStyleProps(playingClipObj.captionStyle!)}
-              />
+            {(playingClipObj?.captionSegments?.length ||
+              playingClipObj?.captionText?.trim()) && (
+              <CaptionOverlay videoRef={videoRef} clip={playingClipObj} />
             )}
             <AnimatePresence>
               {isDragOver && (
