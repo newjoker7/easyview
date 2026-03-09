@@ -1861,7 +1861,15 @@ function VideoEditorInner(
   // Context menu handlers
   const openContextMenu = (e: React.MouseEvent, params: { track: 'video' | 'audio'; trackId?: string; clipId: string }) => {
     e.preventDefault();
-    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, track: params.track, trackId: params.trackId, clipId: params.clipId });
+    const OFFSET_Y = 12; // move um pouco para cima
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: Math.max(0, e.clientY - OFFSET_Y),
+      track: params.track,
+      trackId: params.trackId,
+      clipId: params.clipId,
+    });
   };
 
   useEffect(() => {
