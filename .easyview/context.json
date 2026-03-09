@@ -1,0 +1,65 @@
+{
+  "project": "easy-view-editor",
+  "created_at": "2026-02-21T00:00:00Z",
+  "last_modified_by_agent": "assistant",
+  "last_modified_at": "2026-02-22T00:00:00Z",
+  "stack": {
+    "framework": "React 19 + TypeScript 5.9",
+    "styling": "Tailwind CSS v4 (via @tailwindcss/postcss)",
+    "animation": "Framer Motion 12",
+    "icons": "Lucide React",
+    "bundler": "Vite 7",
+    "transcoding": "@ffmpeg/ffmpeg 0.12 (client-side, dynamic import)",
+    "backend_auth": "Firebase (Auth + Firestore)",
+    "backend_files": "Node.js + Express (server/index.js) — armazena mídia em server/uploads/",
+    "routing": "react-router-dom v7"
+  },
+  "files": {
+    "server": "server/index.js (Express, multer, CORS — porta 4000)",
+    "server_package": "server/package.json",
+    "main_component": "src/components/VideoEditor.tsx (forwardRef, expõe VideoEditorHandle)",
+    "dashboard": "src/components/Dashboard.tsx (orquestrador: sidebar + editor + modais + projetos)",
+    "sidebar": "src/components/Sidebar.tsx (menu lateral colapsável)",
+    "login_page": "src/components/LoginPage.tsx (login/cadastro Email+Senha e Google)",
+    "protected_route": "src/components/ProtectedRoute.tsx",
+    "upload_modal": "src/components/UploadModal.tsx (upload real para servidor com feedback)",
+    "projects_list": "src/components/ProjectsList.tsx",
+    "auth_context": "src/contexts/AuthContext.tsx",
+    "firebase_config": "src/firebase.ts",
+    "api_service": "src/services/api.ts (uploadFile, deleteFile, getFileUrl)",
+    "projects_service": "src/services/projects.ts (CRUD Firestore)",
+    "app_entry": "src/App.tsx (Router + AuthProvider)",
+    "env": ".env (VITE_FIREBASE_* + VITE_API_URL)",
+    "env_example": ".env.example"
+  },
+  "architecture": {
+    "flow": "Login → Dashboard → (Novo Projeto ou Meus Projetos) → Editor aberto → Upload via modal (arquivo vai para servidor Express) → URL salva no Firestore via botão Salvar → Ao reabrir projeto, clips são carregados das URLs do servidor.",
+    "data_persistence": {
+      "metadata": "Firestore — collection 'projects' (userId, name, timestamps, data com clips/audioTracks)",
+      "media_files": "Servidor Express — server/uploads/ — servidos via GET /files/:filename",
+      "clip_urls": "Cada clip tem serverUrl (URL permanente do servidor) e url (blob local para playback imediato). getProjectData() salva serverUrl no Firestore. loadProjectData() usa serverUrl para carregar do servidor."
+    },
+    "editor_api_via_ref": {
+      "getProjectData()": "Retorna estado com serverUrls para persistência",
+      "loadProjectData(data)": "Carrega dados, inicializa video/audio elements com URLs do servidor",
+      "addVideoFile(file, serverUrl?)": "Adiciona vídeo com URL do servidor",
+      "addAudioFile(file, serverUrl?)": "Adiciona áudio como nova trilha com URL do servidor"
+    }
+  },
+  "how_to_run": [
+    "1) Criar .env na raiz com credenciais Firebase + VITE_API_URL=http://localhost:4000",
+    "2) npm install (raiz) + cd server && npm install",
+    "3) Terminal 1: npm run server (Express na porta 4000)",
+    "4) Terminal 2: npm run dev (Vite frontend)",
+    "5) Acessar http://localhost:5173"
+  ],
+  "pending_tasks": [
+    "Autenticação do servidor (validar Firebase token nos endpoints de upload/delete).",
+    "Limpeza de arquivos órfãos no servidor.",
+    "Auto-save periódico do projeto.",
+    "Barra de progresso real durante upload (XHR com onprogress).",
+    "Deploy: dockerizar servidor ou usar plataforma como Railway/Render."
+  ],
+  "agent_instructions": "Ler este arquivo PRIMEIRO. O projeto agora tem 2 processos: frontend (Vite) e servidor (Express). Arquivos de mídia são persistidos no servidor, metadados no Firestore. Clips usam serverUrl para URLs permanentes.",
+  "conversation_transcript": "agent-transcripts/2286f5c5-9104-4816-a8ca-7b5f99a0c1dc.txt"
+}
