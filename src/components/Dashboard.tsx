@@ -72,7 +72,7 @@ export function Dashboard() {
   const handleNewProject = useCallback(async () => {
     if (!user) return;
     const doCreate = async () => {
-      const name = prompt('Nome do projeto11:');
+      const name = prompt('Nome do projeto:');
       if (!name?.trim()) return;
       try {
         const id = await createProject(user.uid, name.trim());
@@ -310,7 +310,7 @@ function EmptyState({ onNewProject, onOpenProjects }: { onNewProject: () => void
         <div className="flex items-center justify-center">
         <img src="/logo.png" alt="vdyou" className="object-contain" style={{ width: '100%', height: '200px' }} />
         </div>
-        <h2 className="text-xl font-semibold text-zinc-200 mb-2">Bem-vindo</h2>
+        <h2 className="text-xl font-semibold text-zinc-200 mb-2">Bem-vindo123</h2>
         <p className="text-sm text-zinc-500 mb-8">Crie um novo projeto ou abra um existente para começar a editar</p>
         <div className="flex items-center justify-center gap-3">
           <button
