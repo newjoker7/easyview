@@ -1861,11 +1861,10 @@ function VideoEditorInner(
   // Context menu handlers
   const openContextMenu = (e: React.MouseEvent, params: { track: 'video' | 'audio'; trackId?: string; clipId: string }) => {
     e.preventDefault();
-    const OFFSET_Y = 12; // move um pouco para cima
     setContextMenu({
       visible: true,
       x: e.clientX,
-      y: Math.max(0, e.clientY - OFFSET_Y),
+      y: e.clientY,
       track: params.track,
       trackId: params.trackId,
       clipId: params.clipId,
@@ -2533,7 +2532,7 @@ function VideoEditorInner(
       {contextMenu.visible && (
         <div
           className="fixed z-60"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={{ left: contextMenu.x, top: contextMenu.y, transform: 'translateY(-100%)' }}
           onContextMenu={(e) => e.preventDefault()}
         >
           <div className="bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1">
