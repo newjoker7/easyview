@@ -11,10 +11,11 @@ if [ -f .env ]; then
   echo "[ok] Backup de .env guardado em .env.backup.server"
 fi
 
-# 2) Atualizar código do repositório (pull do branch atual a partir de origin)
-echo "[ok] A fazer git pull..."
+# 2) Atualizar código do repositório (ficar igual ao remoto; alterações locais são descartadas)
+echo "[ok] A buscar e a aplicar alterações do repositório..."
 BRANCH=$(git branch --show-current)
-git pull origin "$BRANCH"
+git fetch origin
+git reset --hard "origin/$BRANCH"
 
 # 3) Restaurar .env do servidor (nunca usar o do repositório)
 if [ -f .env.backup.server ]; then
