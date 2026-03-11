@@ -293,13 +293,20 @@ app.post('/transcribe', express.json(), async (req, res) => {
     toRemove.push(srtPath);
     const srtContent = fs.readFileSync(srtPath, 'utf8');
     let segments = parseSrtToSegments(srtContent);
-    // Whisper tende a atrasar os timestamps; deslocar segmentos para a legenda aparecer no momento da fala
+    // Ajuste de sync: deslocar um pouco para trás, mas respeitar o intervalo entre blocos (não antecipar a legenda no silêncio)
     const CAPTION_OFFSET_SEC = -0.28;
+    const MIN_GAP_BETWEEN_SEGMENTS = 0.06;
     segments = segments.map((s) => {
-      const start = Math.max(0, s.start + CAPTION_OFFSET_SEC);
-      const end = Math.max(start, s.end + CAPTION_OFFSET_SEC);
-      return { start, end, text: s.text };
+      const start = s.start + CAPTION_OFFSET_SEC;
+      const end = s.end + CAPTION_OFFSET_SEC;
+      return { start, end: Math.max(end, start), text: s.text };
     });
+    for (let i = 0; i < segments.length; i++) {
+      const prevEnd = i === 0 ? 0 : segments[i - 1].end;
+      segments[i].start = Math.max(segments[i].start, prevEnd + MIN_GAP_BETWEEN_SEGMENTS);
+      segments[i].start = Math.max(0, segments[i].start);
+      segments[i].end = Math.max(segments[i].end, segments[i].start);
+    }
     for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
     return res.json({ segments });
   } catch (err) {
