@@ -279,7 +279,7 @@ app.post('/transcribe', express.json(), async (req, res) => {
         outputInSrt: true,
         outputInJson: false,
         wordTimestamps: false,
-        timestamps_length: 8,
+        timestamps_length: 5,
         splitOnWord: true,
       },
     });
@@ -292,7 +292,14 @@ app.post('/transcribe', express.json(), async (req, res) => {
     }
     toRemove.push(srtPath);
     const srtContent = fs.readFileSync(srtPath, 'utf8');
-    const segments = parseSrtToSegments(srtContent);
+    let segments = parseSrtToSegments(srtContent);
+    // Whisper tende a atrasar os timestamps; deslocar segmentos para a legenda aparecer no momento da fala
+    const CAPTION_OFFSET_SEC = -0.28;
+    segments = segments.map((s) => {
+      const start = Math.max(0, s.start + CAPTION_OFFSET_SEC);
+      const end = Math.max(start, s.end + CAPTION_OFFSET_SEC);
+      return { start, end, text: s.text };
+    });
     for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
     return res.json({ segments });
   } catch (err) {
