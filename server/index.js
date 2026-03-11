@@ -293,18 +293,28 @@ app.post('/transcribe', express.json(), async (req, res) => {
     toRemove.push(srtPath);
     const srtContent = fs.readFileSync(srtPath, 'utf8');
     let segments = parseSrtToSegments(srtContent);
-    // Ajuste de sync: deslocar um pouco para trás; garantir intervalo mínimo entre blocos para a legenda sumir nos silêncios
+    // Ajuste de sync:
+    // - Whisper tende a atrasar um pouco os timestamps (offset negativo ajuda).
+    // - Porém, em silêncios longos, NÃO podemos antecipar o início do próximo trecho (senão a legenda aparece no intervalo).
     const CAPTION_OFFSET_SEC = -0.28;
-    const MIN_GAP_BETWEEN_SEGMENTS = 0.22;
-    segments = segments.map((s) => {
-      const start = s.start + CAPTION_OFFSET_SEC;
+    const GAP_NO_ADVANCE_SEC = 0.9; // se houver >= 0.9s de silêncio entre falas, não antecipar o próximo start
+    const MIN_GAP_BETWEEN_SEGMENTS = 0.06;
+
+    // Primeiro, aplicar offset com regra por-gap usando os tempos originais (pré-offset)
+    const original = segments.map((s) => ({ start: s.start, end: s.end, text: s.text }));
+    segments = original.map((s, i) => {
+      const prevOriginalEnd = i === 0 ? 0 : original[i - 1].end;
+      const gap = Math.max(0, s.start - prevOriginalEnd);
+      const startOffset = gap >= GAP_NO_ADVANCE_SEC ? 0 : CAPTION_OFFSET_SEC;
+      const start = s.start + startOffset;
       const end = s.end + CAPTION_OFFSET_SEC;
       return { start, end: Math.max(end, start), text: s.text };
     });
+
+    // Depois, garantir ordenação e um gap mínimo (evita sobreposição/piscar)
     for (let i = 0; i < segments.length; i++) {
       const prevEnd = i === 0 ? 0 : segments[i - 1].end;
-      segments[i].start = Math.max(segments[i].start, prevEnd + MIN_GAP_BETWEEN_SEGMENTS);
-      segments[i].start = Math.max(0, segments[i].start);
+      segments[i].start = Math.max(0, Math.max(segments[i].start, prevEnd + MIN_GAP_BETWEEN_SEGMENTS));
       segments[i].end = Math.max(segments[i].end, segments[i].start);
     }
     for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
