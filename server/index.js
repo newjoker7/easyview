@@ -239,7 +239,7 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
   words.sort((a, b) => a.start - b.start);
 
   // Agrupar palavras em blocos, quebrando em silêncios reais.
-  const GAP_BREAK_SEC = 0.55;
+  const GAP_BREAK_SEC = 1.2; // gaps maiores que ~1.2s viram “pausa” (sem legenda)
   const out = [];
   let cur = null;
   for (const w of words) {
@@ -263,7 +263,7 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
 
   // Ajuste final: atrasar um pouco tudo para nunca aparecer antes da fala percebida.
   const GLOBAL_DELAY_SEC = 0.18;
-  const MIN_GAP_SEC = 0.06;
+  const MIN_GAP_SEC = 0.3; // garantir uma pequena janela sem legenda entre blocos
   const shifted = filtered.map((s) => ({
     start: s.start + GLOBAL_DELAY_SEC,
     end: s.end + GLOBAL_DELAY_SEC,
