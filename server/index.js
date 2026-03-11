@@ -217,6 +217,49 @@ function parseSrtToSegments(srtContent) {
   return segments;
 }
 
+function tryBuildSegmentsFromWhisperJson(jsonObj) {
+  // Formatos possíveis variam; tentamos encontrar words com {start,end,text}
+  const rawSegments = Array.isArray(jsonObj?.segments) ? jsonObj.segments : null;
+  const words = [];
+  if (rawSegments) {
+    for (const s of rawSegments) {
+      const w = Array.isArray(s?.words) ? s.words : null;
+      if (!w) continue;
+      for (const wi of w) {
+        const start = Number(wi?.start);
+        const end = Number(wi?.end);
+        const text = String(wi?.word ?? wi?.text ?? '').trim();
+        if (!Number.isFinite(start) || !Number.isFinite(end) || !text) continue;
+        words.push({ start, end: Math.max(end, start), text });
+      }
+    }
+  }
+
+  if (words.length === 0) return null;
+  words.sort((a, b) => a.start - b.start);
+
+  // Agrupar palavras em blocos, quebrando em silêncios reais.
+  const GAP_BREAK_SEC = 0.55;
+  const out = [];
+  let cur = null;
+  for (const w of words) {
+    if (!cur) {
+      cur = { start: w.start, end: w.end, parts: [w.text] };
+      continue;
+    }
+    const gap = Math.max(0, w.start - cur.end);
+    if (gap >= GAP_BREAK_SEC) {
+      out.push({ start: cur.start, end: cur.end, text: cur.parts.join(' ').trim() });
+      cur = { start: w.start, end: w.end, parts: [w.text] };
+    } else {
+      cur.parts.push(w.text);
+      cur.end = Math.max(cur.end, w.end);
+    }
+  }
+  if (cur) out.push({ start: cur.start, end: cur.end, text: cur.parts.join(' ').trim() });
+  return out.filter((s) => s.text);
+}
+
 app.post('/transcribe', express.json(), async (req, res) => {
   const url = req.body?.url;
   const start = Number(req.body?.start) ?? 0;
@@ -277,12 +320,35 @@ app.post('/transcribe', express.json(), async (req, res) => {
       withCuda: false,
       whisperOptions: {
         outputInSrt: true,
-        outputInJson: false,
+        outputInJson: true,
+        outputInJsonFull: true,
         wordTimestamps: false,
+        wordTimestamps: true,
         timestamps_length: 5,
         splitOnWord: true,
       },
     });
+
+    // Preferir JSON com timestamps por palavra (mais preciso) e derivar segmentos respeitando silêncios
+    const jsonCandidates = [
+      path.join(UPLOADS_DIR, path.basename(audioPath, '.wav') + '.json'),
+      audioPath + '.json',
+    ];
+    for (const jp of jsonCandidates) {
+      if (fs.existsSync(jp)) {
+        toRemove.push(jp);
+        try {
+          const obj = JSON.parse(fs.readFileSync(jp, 'utf8'));
+          const segs = tryBuildSegmentsFromWhisperJson(obj);
+          if (segs && segs.length) {
+            for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
+            return res.json({ segments: segs });
+          }
+        } catch {
+          // fallback abaixo
+        }
+      }
+    }
 
     let srtPath = path.join(UPLOADS_DIR, path.basename(audioPath, '.wav') + '.srt');
     if (!fs.existsSync(srtPath)) srtPath = audioPath + '.srt';
@@ -293,30 +359,7 @@ app.post('/transcribe', express.json(), async (req, res) => {
     toRemove.push(srtPath);
     const srtContent = fs.readFileSync(srtPath, 'utf8');
     let segments = parseSrtToSegments(srtContent);
-    // Ajuste de sync:
-    // - Whisper tende a atrasar um pouco os timestamps (offset negativo ajuda).
-    // - Porém, em silêncios longos, NÃO podemos antecipar o início do próximo trecho (senão a legenda aparece no intervalo).
-    const CAPTION_OFFSET_SEC = -0.28;
-    const GAP_NO_ADVANCE_SEC = 0.9; // se houver >= 0.9s de silêncio entre falas, não antecipar o próximo start
-    const MIN_GAP_BETWEEN_SEGMENTS = 0.06;
-
-    // Primeiro, aplicar offset com regra por-gap usando os tempos originais (pré-offset)
-    const original = segments.map((s) => ({ start: s.start, end: s.end, text: s.text }));
-    segments = original.map((s, i) => {
-      const prevOriginalEnd = i === 0 ? 0 : original[i - 1].end;
-      const gap = Math.max(0, s.start - prevOriginalEnd);
-      const startOffset = gap >= GAP_NO_ADVANCE_SEC ? 0 : CAPTION_OFFSET_SEC;
-      const start = s.start + startOffset;
-      const end = s.end + CAPTION_OFFSET_SEC;
-      return { start, end: Math.max(end, start), text: s.text };
-    });
-
-    // Depois, garantir ordenação e um gap mínimo (evita sobreposição/piscar)
-    for (let i = 0; i < segments.length; i++) {
-      const prevEnd = i === 0 ? 0 : segments[i - 1].end;
-      segments[i].start = Math.max(0, Math.max(segments[i].start, prevEnd + MIN_GAP_BETWEEN_SEGMENTS));
-      segments[i].end = Math.max(segments[i].end, segments[i].start);
-    }
+    // Fallback SRT: não aplicamos offset global aqui para não invadir silêncios.
     for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
     return res.json({ segments });
   } catch (err) {
