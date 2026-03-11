@@ -116,9 +116,9 @@ function CaptionOverlay({
         if (video && typeof video.currentTime === 'number') {
           const timeInClip = video.currentTime - clipStartRef.current;
           const currentSegs = segsRef.current;
-          const seg = currentSegs?.find(
-            (s) => timeInClip >= s.start - CAPTION_TOLERANCE_SEC && timeInClip < s.end + CAPTION_TOLERANCE_SEC
-          );
+          // Importante: não começar a legenda antes do início do trecho (silêncios devem ficar sem legenda).
+          // A tolerância fica apenas no fim para evitar “piscar” no limite.
+          const seg = currentSegs?.find((s) => timeInClip >= s.start && timeInClip < s.end + CAPTION_TOLERANCE_SEC);
           const next = seg?.text ?? '';
           setDisplayText((prev) => (next === prev ? prev : next));
         }
