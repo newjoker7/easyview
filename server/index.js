@@ -293,9 +293,9 @@ app.post('/transcribe', express.json(), async (req, res) => {
     toRemove.push(srtPath);
     const srtContent = fs.readFileSync(srtPath, 'utf8');
     let segments = parseSrtToSegments(srtContent);
-    // Ajuste de sync: deslocar um pouco para trás, mas respeitar o intervalo entre blocos (não antecipar a legenda no silêncio)
+    // Ajuste de sync: deslocar um pouco para trás; garantir intervalo mínimo entre blocos para a legenda sumir nos silêncios
     const CAPTION_OFFSET_SEC = -0.28;
-    const MIN_GAP_BETWEEN_SEGMENTS = 0.06;
+    const MIN_GAP_BETWEEN_SEGMENTS = 0.22;
     segments = segments.map((s) => {
       const start = s.start + CAPTION_OFFSET_SEC;
       const end = s.end + CAPTION_OFFSET_SEC;
