@@ -257,7 +257,24 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
     }
   }
   if (cur) out.push({ start: cur.start, end: cur.end, text: cur.parts.join(' ').trim() });
-  return out.filter((s) => s.text);
+
+  const filtered = out.filter((s) => s.text);
+  if (!filtered.length) return null;
+
+  // Ajuste final: atrasar um pouco tudo para nunca aparecer antes da fala percebida.
+  const GLOBAL_DELAY_SEC = 0.18;
+  const MIN_GAP_SEC = 0.06;
+  const shifted = filtered.map((s) => ({
+    start: s.start + GLOBAL_DELAY_SEC,
+    end: s.end + GLOBAL_DELAY_SEC,
+    text: s.text,
+  }));
+  for (let i = 0; i < shifted.length; i++) {
+    const prevEnd = i === 0 ? 0 : shifted[i - 1].end;
+    shifted[i].start = Math.max(shifted[i].start, prevEnd + MIN_GAP_SEC, 0);
+    shifted[i].end = Math.max(shifted[i].end, shifted[i].start);
+  }
+  return shifted;
 }
 
 app.post('/transcribe', express.json(), async (req, res) => {
