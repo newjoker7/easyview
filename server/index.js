@@ -261,23 +261,22 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
   const filtered = out.filter((s) => s.text);
   if (!filtered.length) return null;
 
-  // Ajuste final:
-  // - Atrasar um pouco tudo para nunca aparecer antes da fala percebida.
-  // - Limitar duração máxima de cada bloco para não “segurar” legenda durante silêncios longos.
-  const GLOBAL_DELAY_SEC = 0.18;
-  const MIN_GAP_SEC = 0.3; // garantir uma pequena janela sem legenda entre blocos
-  const MAX_SEGMENT_DURATION_SEC = 3.2; // máx. ~3.2s por legenda na tela
+  // Ajuste final: a legenda costuma começar antes da fala; atrasar só o INÍCIO, manter o FIM em sync.
+  const START_DELAY_SEC = 0.35; // legenda só aparece quando a fala já começou
+  const MIN_GAP_SEC = 0.3;
+  const MAX_SEGMENT_DURATION_SEC = 3.2;
 
   const shifted = filtered.map((s) => ({
-    start: s.start + GLOBAL_DELAY_SEC,
-    end: s.end + GLOBAL_DELAY_SEC,
+    start: s.start + START_DELAY_SEC,
+    end: s.end, // fim sem atraso para terminar sincronizado com a fala
     text: s.text,
   }));
   for (let i = 0; i < shifted.length; i++) {
     const prevEnd = i === 0 ? 0 : shifted[i - 1].end;
     shifted[i].start = Math.max(shifted[i].start, prevEnd + MIN_GAP_SEC, 0);
+    shifted[i].end = Math.max(shifted[i].end, shifted[i].start);
     const maxEnd = shifted[i].start + MAX_SEGMENT_DURATION_SEC;
-    shifted[i].end = Math.min(Math.max(shifted[i].end, shifted[i].start), maxEnd);
+    shifted[i].end = Math.min(shifted[i].end, maxEnd);
   }
   return shifted;
 }
