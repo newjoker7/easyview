@@ -16,6 +16,8 @@ import { deleteFile } from '../services/api';
 import { TtsModal } from './TtsModal';
 import { Plus, FolderOpen, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { UserLanguage } from '../services/userSettings';
+import { getUserSettings, saveUserSettings } from '../services/userSettings';
 
 export function Dashboard() {
   const { user, logout } = useAuth();
@@ -29,6 +31,9 @@ export function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [unsavedModal, setUnsavedModal] = useState<{ action: () => void } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [language, setLanguage] = useState<UserLanguage>('en');
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   const editorRef = useRef<VideoEditorHandle | null>(null);
   const hasUnsavedRef = useRef(false);
@@ -43,6 +48,23 @@ export function Dashboard() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
+
+  // Carregar configurações do usuário (idioma) ao entrar
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getUserSettings(user.uid);
+        if (!cancelled) setLanguage(s.language);
+      } catch (e) {
+        console.warn('Falha ao carregar configurações do usuário:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const markDirty = useCallback(() => {
     setHasUnsavedChanges(true);
@@ -164,6 +186,26 @@ export function Dashboard() {
     confirmOrProceed(() => logout());
   }, [confirmOrProceed, logout]);
 
+  const handleOpenSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+
+  const handleSaveSettings = useCallback(async () => {
+    if (!user) {
+      setSettingsOpen(false);
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      await saveUserSettings(user.uid, { language });
+      setSettingsOpen(false);
+    } catch (e) {
+      console.error('Erro ao salvar configurações do usuário:', e);
+    } finally {
+      setSettingsSaving(false);
+    }
+  }, [user, language]);
+
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
       <Sidebar
@@ -189,6 +231,7 @@ export function Dashboard() {
           }
           setShowTts(true);
         }}
+        onOpenSettings={handleOpenSettings}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -289,6 +332,64 @@ export function Dashboard() {
                   className="flex-1 py-2.5 bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white font-semibold rounded-xl shadow-lg transition-all"
                 >
                   Descartar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Settings modal */}
+      <AnimatePresence>
+        {settingsOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => !settingsSaving && setSettingsOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-sm p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-lg font-semibold text-zinc-100 mb-4">Configurações</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">
+                    Idioma da interface
+                  </label>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as UserLanguage)}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+                  >
+                    <option value="en">English</option>
+                    <option value="pt">Português</option>
+                    <option value="es">Español</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-zinc-800"
+                  onClick={() => !settingsSaving && setSettingsOpen(false)}
+                  disabled={settingsSaving}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-50"
+                  onClick={handleSaveSettings}
+                  disabled={settingsSaving}
+                >
+                  {settingsSaving ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
             </motion.div>

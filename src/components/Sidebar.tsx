@@ -14,6 +14,7 @@ import {
   Loader2,
   User,
   MessageSquare,
+  Settings,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,6 +28,7 @@ interface SidebarProps {
   onSave: () => void;
   onLogout: () => void;
   onTts: () => void;
+  onOpenSettings: () => void;
 }
 
 export function Sidebar({
@@ -40,6 +42,7 @@ export function Sidebar({
   onSave,
   onLogout,
   onTts,
+  onOpenSettings,
 }: SidebarProps) {
   const { user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -137,7 +140,7 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* User / Logout */}
+      {/* User / Settings / Logout */}
       <div className="px-2 py-3 border-t border-zinc-800/60 space-y-1">
         {!collapsed && user && (
           <div className="flex items-center gap-2.5 px-3 py-2">
@@ -155,6 +158,14 @@ export function Sidebar({
             </div>
           </div>
         )}
+        <button
+          onClick={onOpenSettings}
+          title={collapsed ? 'Configurações' : undefined}
+          className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/70 rounded-xl transition-all duration-150"
+        >
+          <Settings className="w-[18px] h-[18px] shrink-0" />
+          {!collapsed && <span>Configurações</span>}
+        </button>
         <button
           onClick={onLogout}
           title={collapsed ? 'Sair' : undefined}

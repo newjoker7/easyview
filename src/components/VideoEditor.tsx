@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Scissors, CircleOff, Image, Palette, Contrast, Sparkles, Download, Upload, Loader2, CheckCircle, X, Trash2, GripVertical, Layout, Type } from 'lucide-react';
+import { Play, Pause, Scissors, CircleOff, Image, Palette, Contrast, Sparkles, Download, Upload, Loader2, CheckCircle, X, Trash2, GripVertical, Layout, Type, ZoomIn, ZoomOut } from 'lucide-react';
 import { LegendaModal, getCaptionStyleProps } from './LegendaModal';
 import { uploadFile, exportVideoOnServer, convertWebmToMp4 } from '../services/api';
 import type { ProjectData } from '../services/projects';
@@ -180,6 +180,10 @@ function VideoEditorInner(
   const [exportPhase, setExportPhase] = useState<'idle' | 'loading' | 'done'>('idle');
   const [legendaModalOpen, setLegendaModalOpen] = useState(false);
   const [playheadKey, setPlayheadKey] = useState(0);
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const TIMELINE_ZOOM_MIN = 1;
+  const TIMELINE_ZOOM_MAX = 20;
   const [audioTracks, setAudioTracks] = useState<Array<{ id: string; name: string; clips: Clip[]; muted?: boolean }>>(() => {
     if (initialData?.audioTracks?.length) {
       return initialData.audioTracks.map((t) => ({
@@ -1997,6 +2001,18 @@ function VideoEditorInner(
   };
 
   const progressPct = timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0;
+
+  // Ao mudar o zoom, manter o tempo atual visível (scroll suave)
+  useEffect(() => {
+    const el = timelineScrollRef.current;
+    if (!el || timelineDuration <= 0) return;
+    const contentWidth = el.scrollWidth;
+    const containerWidth = el.clientWidth;
+    if (contentWidth <= containerWidth) return;
+    const targetScroll = (progressPct / 100) * contentWidth - containerWidth / 2;
+    el.scrollLeft = Math.max(0, Math.min(targetScroll, contentWidth - containerWidth));
+  }, [timelineZoom, progressPct, timelineDuration]);
+
   // determine playing clip and control target separately:
   // - playingClipObj: the clip currently being shown/played (used to render the filter)
   // - controlClip: the clip that the sidebar controls target (selected clip if any, otherwise playing clip)
@@ -2179,9 +2195,62 @@ function VideoEditorInner(
             <span className="font-mono text-sm tabular-nums text-zinc-300">
               {formatTime(currentTime)} / {formatTime(timelineDuration)}
             </span>
+            {/* Zoom na timeline (estilo VEED): expandir para cortes por segundo */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTimelineZoom((z) => Math.max(TIMELINE_ZOOM_MIN, z - 1))}
+                disabled={timelineZoom <= TIMELINE_ZOOM_MIN}
+                className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-600 text-zinc-200 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Reduzir zoom"
+                aria-label="Reduzir zoom"
+              >
+                <ZoomOut size={18} />
+              </button>
+              <input
+                type="range"
+                min={TIMELINE_ZOOM_MIN}
+                max={TIMELINE_ZOOM_MAX}
+                value={timelineZoom}
+                onChange={(e) => setTimelineZoom(Number(e.target.value))}
+                className="w-24 h-2 rounded-full appearance-none bg-zinc-700 accent-rose-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-rose-500 [&::-webkit-slider-thumb]:cursor-pointer"
+                aria-label="Zoom da timeline"
+              />
+              <button
+                type="button"
+                onClick={() => setTimelineZoom((z) => Math.min(TIMELINE_ZOOM_MAX, z + 1))}
+                disabled={timelineZoom >= TIMELINE_ZOOM_MAX}
+                className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-600 text-zinc-200 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Aumentar zoom"
+                aria-label="Aumentar zoom"
+              >
+                <ZoomIn size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTimelineZoom(1);
+                  if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-600 text-zinc-200 text-xs font-medium hover:bg-zinc-700"
+                title="Ajustar à janela (ver timeline inteira)"
+                aria-label="Em forma"
+              >
+                Em forma
+              </button>
+            </div>
           </div>
 
           <footer className="px-4 pb-4 pt-3 w-full max-w-4xl">
+            <div
+              ref={timelineScrollRef}
+              className="overflow-x-auto overflow-y-hidden rounded-lg"
+              style={{ scrollBehavior: 'smooth' }}
+            >
+              <div
+                style={{ width: `${timelineZoom * 100}%`, minWidth: '100%' }}
+                className="flex flex-col"
+              >
             <div
               ref={rulerRef}
               role="slider"
@@ -2191,18 +2260,24 @@ function VideoEditorInner(
               aria-valuemax={timelineDuration}
               tabIndex={0}
               onClick={handleRulerClick}
-              className="flex justify-between text-xs font-mono mb-1.5 px-0.5 select-none cursor-pointer rounded py-1.5 -mx-0.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center"
+              className="flex justify-between text-xs font-mono mb-1.5 px-0.5 select-none cursor-pointer rounded py-1.5 -mx-0.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center shrink-0"
             >
-              {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
-                <span
-                  key={pct}
-                  className="text-zinc-400 pointer-events-none text-[0.7rem]"
-                >
-                  {formatTime(pct * timelineDuration)}
-                </span>
-              ))}
+              {(() => {
+                const n = Math.max(5, Math.min(30, Math.floor(5 * timelineZoom)));
+                return Array.from({ length: n }, (_, i) => {
+                  const pct = n <= 1 ? 0 : i / (n - 1);
+                  return (
+                    <span
+                      key={i}
+                      className="text-zinc-400 pointer-events-none text-[0.65rem] sm:text-[0.7rem] shrink-0"
+                    >
+                      {formatTime(pct * timelineDuration)}
+                    </span>
+                  );
+                });
+              })()}
             </div>
-            <div ref={timelineAreaRef} className="relative">
+            <div ref={timelineAreaRef} className="relative shrink-0">
             <motion.div
               ref={timelineRef}
               role="slider"
@@ -2271,10 +2346,6 @@ function VideoEditorInner(
                                 </div>
                               );
                             })()}
-                            {/* overlay label centered, transparent background */}
-                            <span className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none text-xs text-zinc-100/90 bg-transparent">
-                              {getClipName(clip, `Vídeo ${i + 1}`)}
-                            </span>
                           </div>
                         </motion.div>
                       );
@@ -2391,11 +2462,7 @@ function VideoEditorInner(
                               onDrop={(e) => handleAudioDrop(e, track.id)}
                               onClick={(e) => { e.stopPropagation(); setSelectedClip({ track: 'audio', trackId: track.id, clipId: clip.id }); setSelectedTrack(track.id); }}
                             >
-                              <div className="flex-1 relative px-2">
-                                <span className={`absolute inset-0 flex items-center justify-center pointer-events-none text-xs ${selectedClip.track === 'audio' && selectedClip.clipId === clip.id ? 'text-zinc-100' : 'text-zinc-100/90'}`}>
-                                  {getClipName(clip, track.name)}
-                                </span>
-                              </div>
+                              <div className="flex-1 relative px-2 min-h-[1.5rem]" />
                             </div>
                           );
                         })}
@@ -2444,6 +2511,8 @@ function VideoEditorInner(
             >
               <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-rose-500 rounded-full border-2 border-zinc-900 pointer-events-none" />
             </motion.div>
+            </div>
+              </div>
             </div>
           </footer>
         </main>
