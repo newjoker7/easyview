@@ -1669,22 +1669,30 @@ function VideoEditorInner(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedClip, splitSpecificVideoClip, splitSpecificAudioClip, undo]);
 
-  // Conversão de posição X em tempo da timeline.
-  // Para a timeline principal usamos o rect do próprio timelineRef;
-  // para a régua superior usamos o rect da régua (rulerRef), pois podem ter larguras/paddings diferentes.
   const getTimeFromClientX = useCallback((clientX: number) => {
-    if (!timelineRef.current || timelineDuration <= 0) return 0;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, x / rect.width));
+    if (!timelineScrollRef.current || !timelineRef.current || timelineDuration <= 0) return 0;
+    const scrollEl = timelineScrollRef.current;
+    const contentEl = timelineRef.current;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const xInViewport = clientX - scrollRect.left;
+    const clampedViewport = Math.max(0, Math.min(scrollRect.width, xInViewport));
+    const xTotal = scrollEl.scrollLeft + clampedViewport;
+    const contentWidth = contentEl.scrollWidth || scrollEl.scrollWidth;
+    if (!contentWidth || contentWidth <= 0) return 0;
+    const pct = Math.max(0, Math.min(1, xTotal / contentWidth));
     return pct * timelineDuration;
   }, [timelineDuration]);
 
   const getTimeFromRulerClientX = useCallback((clientX: number) => {
-    if (!rulerRef.current || timelineDuration <= 0) return 0;
-    const rect = rulerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, x / rect.width));
+    if (!timelineScrollRef.current || !rulerRef.current || timelineDuration <= 0) return 0;
+    const scrollEl = timelineScrollRef.current;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const xInViewport = clientX - scrollRect.left;
+    const clampedViewport = Math.max(0, Math.min(scrollRect.width, xInViewport));
+    const xTotal = scrollEl.scrollLeft + clampedViewport;
+    const contentWidth = rulerRef.current.scrollWidth || scrollEl.scrollWidth;
+    if (!contentWidth || contentWidth <= 0) return 0;
+    const pct = Math.max(0, Math.min(1, xTotal / contentWidth));
     return pct * timelineDuration;
   }, [timelineDuration]);
 
