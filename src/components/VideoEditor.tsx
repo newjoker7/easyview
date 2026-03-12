@@ -1660,11 +1660,20 @@ function VideoEditorInner(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedClip, splitSpecificVideoClip, splitSpecificAudioClip, undo]);
 
-  // Usar sempre timelineRef para o rect (mesma referência para ruler e timeline) e ler no momento do clique,
-  // para não perder a posição após restaurar/maximizar a janela (layout muda).
+  // Conversão de posição X em tempo da timeline.
+  // Para a timeline principal usamos o rect do próprio timelineRef;
+  // para a régua superior usamos o rect da régua (rulerRef), pois podem ter larguras/paddings diferentes.
   const getTimeFromClientX = useCallback((clientX: number) => {
     if (!timelineRef.current || timelineDuration <= 0) return 0;
     const rect = timelineRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, x / rect.width));
+    return pct * timelineDuration;
+  }, [timelineDuration]);
+
+  const getTimeFromRulerClientX = useCallback((clientX: number) => {
+    if (!rulerRef.current || timelineDuration <= 0) return 0;
+    const rect = rulerRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
     const pct = Math.max(0, Math.min(1, x / rect.width));
     return pct * timelineDuration;
@@ -1682,8 +1691,8 @@ function VideoEditorInner(
   };
 
   const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!timelineRef.current || timelineDuration <= 0) return;
-    const time = getTimeFromClientX(e.clientX);
+    if (!rulerRef.current || timelineDuration <= 0) return;
+    const time = getTimeFromRulerClientX(e.clientX);
     seekToTime(time);
     setIsPlaying(false);
     videoRef.current?.pause();
