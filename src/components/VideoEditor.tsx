@@ -1683,19 +1683,6 @@ function VideoEditorInner(
     return pct * timelineDuration;
   }, [timelineDuration]);
 
-  const getTimeFromRulerClientX = useCallback((clientX: number) => {
-    if (!timelineScrollRef.current || !rulerRef.current || timelineDuration <= 0) return 0;
-    const scrollEl = timelineScrollRef.current;
-    const scrollRect = scrollEl.getBoundingClientRect();
-    const xInViewport = clientX - scrollRect.left;
-    const clampedViewport = Math.max(0, Math.min(scrollRect.width, xInViewport));
-    const xTotal = scrollEl.scrollLeft + clampedViewport;
-    const contentWidth = rulerRef.current.scrollWidth || scrollEl.scrollWidth;
-    if (!contentWidth || contentWidth <= 0) return 0;
-    const pct = Math.max(0, Math.min(1, xTotal / contentWidth));
-    return pct * timelineDuration;
-  }, [timelineDuration]);
-
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!timelineRef.current || timelineDuration <= 0) return;
     if ((e.target as HTMLElement).closest('[data-clip-block]')) return;
@@ -1728,22 +1715,14 @@ function VideoEditorInner(
   }, [timelineDuration, timelineZoom]);
 
   const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!rulerRef.current || timelineDuration <= 0) return;
-    let time = getTimeFromRulerClientX(e.clientX);
-    if (rulerTicks.length > 0) {
-      // Alinhar ao tick mais próximo (ex.: clicar em 03:00 cai exatamente em 03:00)
-      let best = rulerTicks[0];
-      let bestDiff = Math.abs(time - best);
-      for (let i = 1; i < rulerTicks.length; i++) {
-        const t = rulerTicks[i];
-        const d = Math.abs(time - t);
-        if (d < bestDiff) {
-          bestDiff = d;
-          best = t;
-        }
-      }
-      time = best;
-    }
+    if (!rulerRef.current || timelineDuration <= 0 || rulerTicks.length === 0) return;
+    const rect = rulerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const frac = Math.max(0, Math.min(1, x / rect.width));
+    const lastIndex = Math.max(0, rulerTicks.length - 1);
+    const approxIndex = Math.round(frac * lastIndex);
+    const clampedIndex = Math.max(0, Math.min(lastIndex, approxIndex));
+    const time = rulerTicks[clampedIndex];
     seekToTime(time);
     setIsPlaying(false);
     videoRef.current?.pause();
