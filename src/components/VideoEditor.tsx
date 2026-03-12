@@ -2384,8 +2384,11 @@ function VideoEditorInner(
                     initial={false}
                     animate={{ width: `${progressPct}%` }}
                     transition={{ type: 'spring', stiffness: 300, damping: 35 }}
-                  />
-                  {/* playhead moved to cover full timeline area */}
+                  >
+                    {/* Indicador vermelho exatamente na borda do progresso */}
+                    <div className="absolute top-0 bottom-0 right-0 w-1 bg-rose-500 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.6)]" />
+                  </motion.div>
+                  {/* playhead visual segue exatamente o progresso */}
                 </>
               )}
             </motion.div>
@@ -2500,45 +2503,7 @@ function VideoEditorInner(
                 })}
               </div>
             )}
-            {/* Playhead spanning entire timeline area (video + audio tracks) */}
-            <motion.div
-              key={playheadKey}
-              className="absolute top-0 bottom-0 w-1 bg-rose-500 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.6)] z-20 cursor-ew-resize touch-none select-none"
-              style={{ left: `${progressPct}%` }}
-              initial={false}
-              animate={{ left: `${progressPct}%` }}
-              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-              drag="x"
-              dragConstraints={timelineRef}
-              dragElastic={0}
-              dragMomentum={false}
-              onDragStart={() => {
-                playheadDragStartPctRef.current = progressPct;
-                wasPlayingBeforePlayheadDragRef.current = isPlaying;
-                if (videoRef.current && isPlaying) {
-                  videoRef.current.pause();
-                  setIsPlaying(false);
-                }
-              }}
-              onDragEnd={(e) => {
-                if (!timelineRef.current || timelineDuration <= 0) return;
-                const playheadEl = e.target as HTMLElement;
-                const playheadRect = playheadEl.getBoundingClientRect();
-                const timelineRect = timelineRef.current.getBoundingClientRect();
-                const playheadLeftEdge = playheadRect.left - timelineRect.left;
-                const relativeX = playheadLeftEdge;
-                const pct = Math.max(0, Math.min(1, relativeX / timelineRect.width));
-                const time = pct * timelineDuration;
-                seekToTime(time);
-                setPlayheadKey((k) => k + 1);
-                if (wasPlayingBeforePlayheadDragRef.current && videoRef.current) {
-                  videoRef.current.play().catch(() => {});
-                  setIsPlaying(true);
-                }
-              }}
-            >
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-rose-500 rounded-full border-2 border-zinc-900 pointer-events-none" />
-            </motion.div>
+            {/* Playhead visual agora é a borda direita da barra de progresso */}
             </div>
               </div>
             </div>
