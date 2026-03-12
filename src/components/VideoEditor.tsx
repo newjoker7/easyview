@@ -1669,6 +1669,7 @@ function VideoEditorInner(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedClip, splitSpecificVideoClip, splitSpecificAudioClip, undo]);
 
+  // Converte a posição X (na viewport) em tempo da timeline, considerando scroll + zoom
   const getTimeFromClientX = useCallback((clientX: number) => {
     if (!timelineScrollRef.current || !timelineRef.current || timelineDuration <= 0) return 0;
     const scrollEl = timelineScrollRef.current;
@@ -1694,6 +1695,7 @@ function VideoEditorInner(
     playAllAudioAtTimeRef.current?.(time, false);
   };
 
+  // Posições exatas dos marcadores da régua (em segundos)
   const rulerTicks = useMemo<number[]>(() => {
     if (timelineDuration <= 0) return [];
     let step = 60;
@@ -1715,14 +1717,12 @@ function VideoEditorInner(
   }, [timelineDuration, timelineZoom]);
 
   const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!rulerRef.current || timelineDuration <= 0 || rulerTicks.length === 0) return;
+    if (!rulerRef.current || timelineDuration <= 0) return;
+    // Mapeia linearmente a posição X clicada para o tempo na timeline
     const rect = rulerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const frac = Math.max(0, Math.min(1, x / rect.width));
-    const lastIndex = Math.max(0, rulerTicks.length - 1);
-    const approxIndex = Math.round(frac * lastIndex);
-    const clampedIndex = Math.max(0, Math.min(lastIndex, approxIndex));
-    const time = rulerTicks[clampedIndex];
+    const time = frac * timelineDuration;
     seekToTime(time);
     setIsPlaying(false);
     videoRef.current?.pause();
@@ -2287,7 +2287,7 @@ function VideoEditorInner(
               aria-valuemax={timelineDuration}
               tabIndex={0}
               onClick={handleRulerClick}
-              className="flex justify-between text-xs font-mono mb-1.5 px-0.5 select-none cursor-pointer rounded py-1.5 -mx-0.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center shrink-0"
+              className="relative text-xs font-mono mb-1.5 px-0.5 select-none cursor-pointer rounded py-1.5 -mx-0.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center shrink-0"
             >
               {(() => {
                 if (rulerTicks.length === 0) return null;
@@ -2296,8 +2296,8 @@ function VideoEditorInner(
                   return (
                     <span
                       key={`${idx}-${Math.round(t * 1000)}`}
-                      className="text-zinc-400 pointer-events-none text-[0.65rem] sm:text-[0.7rem] shrink-0"
-                      style={{ transform: 'translateX(0)' }}
+                      className="absolute -translate-x-1/2 text-zinc-400 pointer-events-none text-[0.65rem] sm:text-[0.7rem]"
+                      style={{ left: `${pct * 100}%` }}
                     >
                       {formatTime(t)}
                     </span>
