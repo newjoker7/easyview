@@ -2062,17 +2062,6 @@ function VideoEditorInner(
 
   const progressPct = timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0;
 
-  // Ao mudar o zoom, manter o tempo atual visível (scroll suave)
-  useEffect(() => {
-    const el = timelineScrollRef.current;
-    if (!el || timelineDuration <= 0) return;
-    const contentWidth = el.scrollWidth;
-    const containerWidth = el.clientWidth;
-    if (contentWidth <= containerWidth) return;
-    const targetScroll = (progressPct / 100) * contentWidth - containerWidth / 2;
-    el.scrollLeft = Math.max(0, Math.min(targetScroll, contentWidth - containerWidth));
-  }, [timelineZoom, progressPct, timelineDuration]);
-
   // determine playing clip and control target separately:
   // - playingClipObj: the clip currently being shown/played (used to render the filter)
   // - controlClip: the clip that the sidebar controls target (selected clip if any, otherwise playing clip)
