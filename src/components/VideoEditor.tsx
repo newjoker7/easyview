@@ -2256,7 +2256,6 @@ function VideoEditorInner(
                 type="button"
                 onClick={() => {
                   setTimelineZoom(1);
-                  if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
                 }}
                 className="px-2.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-600 text-zinc-200 text-xs font-medium hover:bg-zinc-700"
                 title="Ajustar à janela (ver timeline inteira)"
@@ -2289,15 +2288,34 @@ function VideoEditorInner(
               className="flex justify-between text-xs font-mono mb-1.5 px-0.5 select-none cursor-pointer rounded py-1.5 -mx-0.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center shrink-0"
             >
               {(() => {
-                const n = Math.max(5, Math.min(30, Math.floor(5 * timelineZoom)));
-                return Array.from({ length: n }, (_, i) => {
-                  const pct = n <= 1 ? 0 : i / (n - 1);
+                if (timelineDuration <= 0) return null;
+                // Escolhe espaçamento de marca em segundos conforme o zoom
+                // Zoom baixo: marcas em minutos; zoom alto: marcas em segundos.
+                let step = 60;
+                if (timelineZoom >= 8) step = 5;
+                else if (timelineZoom >= 4) step = 10;
+                else if (timelineZoom >= 2) step = 30;
+
+                const ticks: number[] = [];
+                for (let t = 0; t <= timelineDuration + 0.0001; t += step) {
+                  ticks.push(t);
+                }
+                // Garante sempre a última marca exatamente no fim
+                if (ticks[ticks.length - 1] < timelineDuration - step * 0.3) {
+                  ticks.push(timelineDuration);
+                } else {
+                  ticks[ticks.length - 1] = timelineDuration;
+                }
+
+                return ticks.map((t, idx) => {
+                  const pct = timelineDuration > 0 ? t / timelineDuration : 0;
                   return (
                     <span
-                      key={i}
+                      key={`${idx}-${Math.round(t * 1000)}`}
                       className="text-zinc-400 pointer-events-none text-[0.65rem] sm:text-[0.7rem] shrink-0"
+                      style={{ transform: 'translateX(0)' }}
                     >
-                      {formatTime(pct * timelineDuration)}
+                      {formatTime(t)}
                     </span>
                   );
                 });
