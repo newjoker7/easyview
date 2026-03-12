@@ -183,7 +183,7 @@ function VideoEditorInner(
   const [timelineZoom, setTimelineZoom] = useState(1);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const TIMELINE_ZOOM_MIN = 1;
-  const TIMELINE_ZOOM_MAX = 20;
+  const TIMELINE_ZOOM_MAX = 8;
   const [audioTracks, setAudioTracks] = useState<Array<{ id: string; name: string; clips: Clip[]; muted?: boolean }>>(() => {
     if (initialData?.audioTracks?.length) {
       return initialData.audioTracks.map((t) => ({
