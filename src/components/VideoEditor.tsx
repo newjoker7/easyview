@@ -2287,7 +2287,7 @@ function VideoEditorInner(
               aria-valuemax={timelineDuration}
               tabIndex={0}
               onClick={handleRulerClick}
-              className="relative text-xs font-mono mb-1.5 px-0.5 select-none cursor-pointer rounded py-1.5 -mx-0.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center shrink-0"
+              className="relative text-xs font-mono mb-1.5 select-none cursor-pointer rounded py-1.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center shrink-0"
             >
               {(() => {
                 if (rulerTicks.length === 0) return null;
