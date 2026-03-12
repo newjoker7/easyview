@@ -1707,9 +1707,43 @@ function VideoEditorInner(
     playAllAudioAtTimeRef.current?.(time, false);
   };
 
+  const rulerTicks = useMemo<number[]>(() => {
+    if (timelineDuration <= 0) return [];
+    let step = 60;
+    if (timelineZoom >= 8) step = 5;
+    else if (timelineZoom >= 4) step = 10;
+    else if (timelineZoom >= 2) step = 30;
+
+    const ticks: number[] = [];
+    for (let t = 0; t <= timelineDuration + 0.0001; t += step) {
+      ticks.push(t);
+    }
+    if (ticks.length === 0) return ticks;
+    if (ticks[ticks.length - 1] < timelineDuration - step * 0.3) {
+      ticks.push(timelineDuration);
+    } else {
+      ticks[ticks.length - 1] = timelineDuration;
+    }
+    return ticks;
+  }, [timelineDuration, timelineZoom]);
+
   const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!rulerRef.current || timelineDuration <= 0) return;
-    const time = getTimeFromRulerClientX(e.clientX);
+    let time = getTimeFromRulerClientX(e.clientX);
+    if (rulerTicks.length > 0) {
+      // Alinhar ao tick mais próximo (ex.: clicar em 03:00 cai exatamente em 03:00)
+      let best = rulerTicks[0];
+      let bestDiff = Math.abs(time - best);
+      for (let i = 1; i < rulerTicks.length; i++) {
+        const t = rulerTicks[i];
+        const d = Math.abs(time - t);
+        if (d < bestDiff) {
+          bestDiff = d;
+          best = t;
+        }
+      }
+      time = best;
+    }
     seekToTime(time);
     setIsPlaying(false);
     videoRef.current?.pause();
@@ -2288,26 +2322,8 @@ function VideoEditorInner(
               className="flex justify-between text-xs font-mono mb-1.5 px-0.5 select-none cursor-pointer rounded py-1.5 -mx-0.5 hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors min-h-[2rem] items-center shrink-0"
             >
               {(() => {
-                if (timelineDuration <= 0) return null;
-                // Escolhe espaçamento de marca em segundos conforme o zoom
-                // Zoom baixo: marcas em minutos; zoom alto: marcas em segundos.
-                let step = 60;
-                if (timelineZoom >= 8) step = 5;
-                else if (timelineZoom >= 4) step = 10;
-                else if (timelineZoom >= 2) step = 30;
-
-                const ticks: number[] = [];
-                for (let t = 0; t <= timelineDuration + 0.0001; t += step) {
-                  ticks.push(t);
-                }
-                // Garante sempre a última marca exatamente no fim
-                if (ticks[ticks.length - 1] < timelineDuration - step * 0.3) {
-                  ticks.push(timelineDuration);
-                } else {
-                  ticks[ticks.length - 1] = timelineDuration;
-                }
-
-                return ticks.map((t, idx) => {
+                if (rulerTicks.length === 0) return null;
+                return rulerTicks.map((t, idx) => {
                   const pct = timelineDuration > 0 ? t / timelineDuration : 0;
                   return (
                     <span
