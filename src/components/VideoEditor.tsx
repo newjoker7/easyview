@@ -310,14 +310,13 @@ function VideoEditorInner(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const attemptPlay = useCallback((v: HTMLVideoElement | null, maxRetries = 5) => {
+  const attemptPlay = useCallback((v: HTMLVideoElement | null, maxRetries = 3) => {
     return new Promise<void>((resolve, reject) => {
-      if (!v) return reject();
+      if (!v) return reject(new Error('no-video'));
       tryPlayRetriesRef.current = 0;
       const tryOnce = () => {
         v.play()
           .then(() => {
-            setIsPlaying(true);
             tryPlayRetriesRef.current = 0;
             resolve();
           })
@@ -1399,6 +1398,7 @@ function VideoEditorInner(
   };
 
   const togglePlayPause = () => {
+    if (isAttemptingPlay) return;
     const v = videoRef.current;
     // If currently playing -> pause all media
     if (isPlaying) {
@@ -1418,14 +1418,19 @@ function VideoEditorInner(
     if (clips.length > 0 && v && currentTime < videoEnd) {
       videoFinishedRef.current = false;
       setVideoFinished(false);
+      setIsAttemptingPlay(true);
       attemptPlay(v)
         .then(() => {
           setIsPlaying(true);
           playAllAudioAtTime(currentTime, true);
         })
-      .catch(() => {
+        .catch(() => {
+          setIsPlaying(false);
           setShowContinueOverlay(true);
-          try { playAllAudioAtTime(currentTime, true); } catch {}
+          try { playAllAudioAtTime(currentTime, false); } catch {}
+        })
+        .finally(() => {
+          setIsAttemptingPlay(false);
         });
       return;
     }
@@ -1442,6 +1447,7 @@ function VideoEditorInner(
     if (clips.length > 0 && v) {
       videoFinishedRef.current = false;
       setVideoFinished(false);
+      setIsAttemptingPlay(true);
       attemptPlay(v)
         .then(() => {
           setIsPlaying(true);
@@ -1450,6 +1456,9 @@ function VideoEditorInner(
         .catch(() => {
           setIsPlaying(false);
           setShowContinueOverlay(true);
+        })
+        .finally(() => {
+          setIsAttemptingPlay(false);
         });
     }
   };
@@ -2148,9 +2157,9 @@ function VideoEditorInner(
             <button
               type="button"
               onClick={togglePlayPause}
-              disabled={clips.length === 0 && audioTracks.length === 0}
+              disabled={isAttemptingPlay || (clips.length === 0 && audioTracks.length === 0)}
               className={`flex items-center justify-center w-14 h-14 rounded-full border-2 text-zinc-50 font-medium shadow-lg transition-all duration-200 active:scale-95 ${
-                clips.length === 0
+                isAttemptingPlay || clips.length === 0
                   ? 'bg-zinc-700 border-zinc-600 text-zinc-400 cursor-not-allowed opacity-70'
                   : actualPlaying
                     ? 'bg-amber-500 border-amber-400 text-zinc-900 hover:bg-amber-400 hover:border-amber-300 hover:shadow-xl'
