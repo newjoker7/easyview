@@ -282,6 +282,7 @@ function VideoEditorInner(
   isPlayingRef.current = isPlaying;
   const isSwitchingRef = useRef(false);
   const tryPlayRetriesRef = useRef(0);
+  const attemptingPlaySafetyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioRafRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
   const videoBgRef = useRef<HTMLVideoElement | null>(null);
@@ -311,6 +312,24 @@ function VideoEditorInner(
   }, []);
 
   const PLAY_ATTEMPT_TIMEOUT_MS = 8000;
+  const ATTEMPTING_PLAY_SAFETY_MS = 12000; // maior que PLAY_ATTEMPT_TIMEOUT_MS; garante que o botão nunca fique travado
+
+  const clearAttemptingPlay = useCallback(() => {
+    if (attemptingPlaySafetyTimeoutRef.current) {
+      clearTimeout(attemptingPlaySafetyTimeoutRef.current);
+      attemptingPlaySafetyTimeoutRef.current = null;
+    }
+    setIsAttemptingPlay(false);
+  }, []);
+
+  const startAttemptingPlay = useCallback(() => {
+    if (attemptingPlaySafetyTimeoutRef.current) clearTimeout(attemptingPlaySafetyTimeoutRef.current);
+    setIsAttemptingPlay(true);
+    attemptingPlaySafetyTimeoutRef.current = setTimeout(() => {
+      attemptingPlaySafetyTimeoutRef.current = null;
+      setIsAttemptingPlay(false);
+    }, ATTEMPTING_PLAY_SAFETY_MS);
+  }, []);
 
   const attemptPlay = useCallback((v: HTMLVideoElement | null, maxRetries = 3) => {
     if (!v) return Promise.reject(new Error('no-video'));
@@ -1299,7 +1318,7 @@ function VideoEditorInner(
         currentClipIndexRef.current = i + 1;
         if (wasPlayingNow) {
           attemptPlay(video).catch(() => {
-            setIsAttemptingPlay(false);
+            clearAttemptingPlay();
             setShowContinueOverlay(true);
             try { playAllAudioAtTime(startTimesArr[i + 1], true); } catch {}
           });
@@ -1373,7 +1392,7 @@ function VideoEditorInner(
       pendingSwitchRef.current = null;
       if (playAfter) {
         attemptPlay(video).catch(() => {
-          setIsAttemptingPlay(false);
+          clearAttemptingPlay();
           setShowContinueOverlay(true);
           try { playAllAudioAtTime(newTimelineTime, true); } catch {}
         });
@@ -1432,15 +1451,14 @@ function VideoEditorInner(
       setVideoFinished(false);
       const at = getClipAtTime(currentTime);
       if (at && currentClipUrlRef.current !== at.clip.url) {
-        setIsAttemptingPlay(true);
+        startAttemptingPlay();
         v.src = at.clip.url;
         currentClipUrlRef.current = at.clip.url;
         currentClipIndexRef.current = at.clipIndex;
         v.load();
-        const clearAttempting = () => setIsAttemptingPlay(false);
-        v.addEventListener('error', clearAttempting, { once: true });
+        v.addEventListener('error', clearAttemptingPlay, { once: true });
         v.addEventListener('loadeddata', () => {
-          v.removeEventListener('error', clearAttempting);
+          v.removeEventListener('error', clearAttemptingPlay);
           v.currentTime = at.sourceTime;
           attemptPlay(v)
             .then(() => {
@@ -1452,7 +1470,7 @@ function VideoEditorInner(
               setShowContinueOverlay(true);
               playAllAudioAtTime(currentTime, false);
             })
-            .finally(() => setIsAttemptingPlay(false));
+            .finally(clearAttemptingPlay);
         }, { once: true });
         return;
       }
@@ -1460,7 +1478,7 @@ function VideoEditorInner(
         v.currentTime = at.sourceTime;
         currentClipIndexRef.current = at.clipIndex;
       }
-      setIsAttemptingPlay(true);
+      startAttemptingPlay();
       attemptPlay(v)
         .then(() => {
           setIsPlaying(true);
@@ -1471,7 +1489,7 @@ function VideoEditorInner(
           setShowContinueOverlay(true);
           try { playAllAudioAtTime(currentTime, false); } catch {}
         })
-        .finally(() => setIsAttemptingPlay(false));
+        .finally(clearAttemptingPlay);
       return;
     }
 
@@ -1487,7 +1505,7 @@ function VideoEditorInner(
     if (clips.length > 0 && v) {
       videoFinishedRef.current = false;
       setVideoFinished(false);
-      setIsAttemptingPlay(true);
+      startAttemptingPlay();
       attemptPlay(v)
         .then(() => {
           setIsPlaying(true);
@@ -1497,9 +1515,7 @@ function VideoEditorInner(
           setIsPlaying(false);
           setShowContinueOverlay(true);
         })
-        .finally(() => {
-          setIsAttemptingPlay(false);
-        });
+        .finally(clearAttemptingPlay);
     }
   };
 
