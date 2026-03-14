@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, forwardRef, u
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Scissors, CircleOff, Image, Palette, Contrast, Sparkles, Download, Upload, Loader2, CheckCircle, X, Trash2, GripVertical, Layout, Type, ZoomIn, ZoomOut } from 'lucide-react';
 import { LegendaModal, getCaptionStyleProps } from './LegendaModal';
+import { CaptionOverlay } from './CaptionOverlay';
 import { uploadFile, exportVideoOnServer, convertWebmToMp4 } from '../services/api';
 import type { ProjectData } from '../services/projects';
 
@@ -86,82 +87,6 @@ function getClipName(c: Clip, fallback?: string) {
     // ignore
   }
   return fallback ?? 'Clip';
-}
-
-const CAPTION_TOLERANCE_SEC = 0.06;
-
-function CaptionOverlay({
-  videoRef,
-  clip,
-  styleProps,
-}: {
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  clip: Clip;
-  styleProps: React.CSSProperties | null;
-}) {
-  const [displayText, setDisplayText] = useState('');
-  const segs = clip?.captionSegments;
-  const hasSegments = Array.isArray(segs) && segs.length > 0;
-  const segsRef = useRef(segs);
-  segsRef.current = segs;
-  const clipStartRef = useRef(clip?.start ?? 0);
-  clipStartRef.current = clip?.start ?? 0;
-
-  useEffect(() => {
-    if (!clip) return;
-    if (hasSegments && segs?.length) {
-      let rafId: number;
-      const tick = () => {
-        const video = videoRef?.current;
-        if (video && typeof video.currentTime === 'number') {
-          const currentSegs = segsRef.current;
-          // Importante: não começar a legenda antes do início do trecho (silêncios devem ficar sem legenda).
-          // A tolerância fica apenas no fim para evitar “piscar” no limite.
-          const clipStart = clipStartRef.current;
-          const clipEnd = clip.end ?? clipStart + 1;
-          const vt = video.currentTime;
-          if (vt < clipStart - 0.02 || vt > clipEnd + 0.02) {
-            setDisplayText('');
-            rafId = requestAnimationFrame(tick);
-            return;
-          }
-          const timeInClip = vt - clipStart;
-          if (!currentSegs?.length) {
-            rafId = requestAnimationFrame(tick);
-            return;
-          }
-          const seg = currentSegs.find((s) => {
-            const inClipRange = s.start >= clipStart - 0.01 && s.end <= clipEnd + 0.01;
-            const segStart = inClipRange ? s.start - clipStart : s.start;
-            const segEnd = inClipRange ? s.end - clipStart : s.end;
-            return (
-              timeInClip >= segStart &&
-              timeInClip < segEnd + CAPTION_TOLERANCE_SEC
-            );
-          });
-          const next = seg?.text ?? '';
-          setDisplayText((prev) => (next === prev ? prev : next));
-        }
-        rafId = requestAnimationFrame(tick);
-      };
-      rafId = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(rafId);
-    }
-    setDisplayText(clip.captionText?.trim() ?? '');
-    return undefined;
-  }, [clip?.id, clip?.start, clip?.end, clip?.captionText, videoRef, hasSegments, segs?.length]);
-
-  if (!styleProps || !displayText) return null;
-  return (
-    <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-6 z-10 px-4">
-      <span
-        className="text-xl font-medium break-words text-center max-w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-        style={styleProps}
-      >
-        {displayText}
-      </span>
-    </div>
-  );
 }
 
 export interface VideoEditorHandle {
