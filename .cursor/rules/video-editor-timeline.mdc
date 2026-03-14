@@ -1,0 +1,35 @@
+---
+description: Comportamento da timeline, régua, zoom e botão play no VideoEditor
+globs: src/components/VideoEditor.tsx
+alwaysApply: false
+---
+
+# VideoEditor – Timeline, régua e play
+
+## Cálculo de tempo (zoom + scroll)
+
+- **Sempre** usar `getTimeFromClientX(clientX)` para converter posição X do mouse em tempo da timeline.
+- **Não** usar `getBoundingClientRect()` da régua sozinho: com zoom a régua é scrollável e a posição deve considerar `scrollLeft` e a largura total do conteúdo.
+- Em `getTimeFromClientX`, a largura do conteúdo é **sempre** `timelineScrollRef.current.scrollWidth` (container de scroll), não a do elemento da timeline, para régua e faixas usarem a mesma referência.
+
+## Seek e clique na régua
+
+- `handleRulerClick` e `handleTimelineClick` chamam `getTimeFromClientX(e.clientX)` e depois `seekToTime(time)`.
+- Em `seekToTime`, garantir tempo numérico válido: `const tSafe = Number.isFinite(t) ? t : 0` antes de limitar a `[0, timelineDuration]`.
+
+## Botão Play e estado “tentando”
+
+- Ao iniciar uma tentativa de play: usar **`startAttemptingPlay()`** (nunca só `setIsAttemptingPlay(true)`). Isso agenda um timeout de segurança (~12s) que limpa o estado se o fluxo travar.
+- Ao terminar (sucesso ou erro): usar **`clearAttemptingPlay()`** (nunca só `setIsAttemptingPlay(false)`), para cancelar o timeout e limpar o estado.
+- Após seek ou clique na régua, o vídeo pode ainda estar carregando: usar **`attemptPlayWhenReady(v)`** em vez de `attemptPlay(v)` direto. Ela espera `canplay` (com timeout) antes de chamar `attemptPlay`, evitando botão cinza/travado.
+- Em handlers assíncronos (ex.: `loadeddata`), envolver o fluxo em **try/catch** e chamar `clearAttemptingPlay()` no catch.
+
+## Resumo de funções
+
+| Função | Uso |
+|--------|-----|
+| `getTimeFromClientX(clientX)` | Clique na régua ou na timeline → tempo em segundos |
+| `seekToTime(t)` | Ir para o tempo `t` (com clamp e troca de clip se necessário) |
+| `startAttemptingPlay()` | Antes de qualquer tentativa de play |
+| `clearAttemptingPlay()` | No finally/catch e em listeners de erro do vídeo |
+| `attemptPlayWhenReady(v)` | Play após seek/régua; usa `attemptPlay(v)` se `readyState >= 2`, senão espera `canplay` |

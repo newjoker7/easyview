@@ -118,7 +118,19 @@ function CaptionOverlay({
           const currentSegs = segsRef.current;
           // Importante: não começar a legenda antes do início do trecho (silêncios devem ficar sem legenda).
           // A tolerância fica apenas no fim para evitar “piscar” no limite.
-          const seg = currentSegs?.find((s) => timeInClip >= s.start && timeInClip < s.end + CAPTION_TOLERANCE_SEC);
+          const clipStart = clipStartRef.current;
+          const clipEnd = clip.end ?? clipStart + 1;
+          const seg = currentSegs?.length
+            ? currentSegs.find((s) => {
+            const inClipRange = s.start >= clipStart - 0.01 && s.end <= clipEnd + 0.01;
+            const segStart = inClipRange ? s.start - clipStart : s.start;
+            const segEnd = inClipRange ? s.end - clipStart : s.end;
+            return (
+              timeInClip >= segStart &&
+              timeInClip < segEnd + CAPTION_TOLERANCE_SEC
+            );
+          })
+            : undefined;
           const next = seg?.text ?? '';
           setDisplayText((prev) => (next === prev ? prev : next));
         }
@@ -129,7 +141,7 @@ function CaptionOverlay({
     }
     setDisplayText(clip.captionText?.trim() ?? '');
     return undefined;
-  }, [clip?.id, clip?.start, clip?.captionText, videoRef, hasSegments, segs?.length]);
+  }, [clip?.id, clip?.start, clip?.end, clip?.captionText, videoRef, hasSegments, segs?.length]);
 
   if (!styleProps || !displayText) return null;
   return (

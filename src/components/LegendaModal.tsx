@@ -92,8 +92,21 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
 
     try {
       const { segments: segs } = await transcribeVideo(clipUrl, clipStart, clipEnd);
-      setSegments(segs || []);
-      if (!segs?.length) setExtractError('Nenhuma fala detectada no trecho.');
+      const startRef = clipStart ?? 0;
+      const endRef = clipEnd ?? startRef + 1;
+      // Normalizar para tempo relativo ao clipe (0 = início do clipe), para sincronizar com o overlay.
+      const normalized =
+        segs?.map((s) => {
+          const inClipRange =
+            s.start >= startRef - 0.01 && s.end <= endRef + 0.01;
+          return {
+            ...s,
+            start: inClipRange ? s.start - startRef : s.start,
+            end: inClipRange ? s.end - startRef : s.end,
+          };
+        }) ?? [];
+      setSegments(normalized);
+      if (!normalized.length) setExtractError('Nenhuma fala detectada no trecho.');
     } catch (e: unknown) {
       setExtractError(e instanceof Error ? e.message : 'Falha ao extrair legenda.');
       setSegments([]);
