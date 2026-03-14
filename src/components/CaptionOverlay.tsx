@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 const CAPTION_TRACK_LABEL = 'Legenda (editor)';
+/** Intervalo mínimo (em segundos) entre cues para haver "break" sem legenda entre falas. */
+const CAPTION_GAP_BETWEEN_CUES_SEC = 0.2;
 
 export interface CaptionOverlayClip {
   id?: string;
@@ -53,13 +55,21 @@ export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayPro
 
       const clipStart = clip.start ?? 0;
       const clipEnd = clip.end ?? clipStart + 1;
-      for (const s of segs) {
-        const start = Math.max(clipStart, Math.min(clipEnd, clipStart + s.start));
-        const end = Math.max(start, Math.min(clipEnd, clipStart + s.end));
-        if (end <= start || !s.text.trim()) continue;
-        const cue = new VTTCue(start, end, s.text.trim());
+      const gap = CAPTION_GAP_BETWEEN_CUES_SEC;
+      const sorted = [...segs].sort((a, b) => a.start - b.start);
+      let prevEnd = clipStart - 1;
+      for (let i = 0; i < sorted.length; i++) {
+        const s = sorted[i];
+        const mediaStart = clipStart + s.start;
+        const mediaEnd = clipStart + s.end;
+        const nextStart = i + 1 < sorted.length ? clipStart + sorted[i + 1].start : Infinity;
+        const cueStart = Math.max(clipStart, mediaStart, prevEnd + gap);
+        const cueEnd = Math.min(clipEnd, mediaEnd, nextStart - gap);
+        if (cueEnd <= cueStart || !s.text.trim()) continue;
+        const cue = new VTTCue(cueStart, cueEnd, s.text.trim());
         track.addCue(cue);
         cuesRef.current.push(cue);
+        prevEnd = cueEnd;
       }
       track.mode = 'showing';
 
