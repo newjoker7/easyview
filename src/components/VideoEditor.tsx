@@ -359,6 +359,35 @@ function VideoEditorInner(
     return Promise.race([playPromise, timeoutPromise]);
   }, []);
 
+  // Após seek (ex.: clique na régua), o vídeo pode ainda estar carregando; chamar play() nesse estado pode travar. Esperar canplay.
+  const CANPLAY_WAIT_MS = 5000;
+  const attemptPlayWhenReady = useCallback((v: HTMLVideoElement | null): Promise<void> => {
+    if (!v) return Promise.reject(new Error('no-video'));
+    if (v.readyState >= 2) return attemptPlay(v); // HAVE_CURRENT_DATA ou mais
+    return new Promise((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const cleanup = () => {
+        v.removeEventListener('canplay', onCanPlay);
+        v.removeEventListener('error', onError);
+        clearTimeout(timeoutId);
+      };
+      const onCanPlay = () => {
+        cleanup();
+        attemptPlay(v).then(resolve).catch(reject);
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('video-error'));
+      };
+      v.addEventListener('canplay', onCanPlay, { once: true });
+      v.addEventListener('error', onError, { once: true });
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('canplay-timeout'));
+      }, CANPLAY_WAIT_MS);
+    });
+  }, [attemptPlay]);
+
   const totalDuration = useMemo(
     () => clips.reduce((acc, c) => acc + (c.end - c.start), 0),
     [clips]
@@ -1459,18 +1488,22 @@ function VideoEditorInner(
         v.addEventListener('error', clearAttemptingPlay, { once: true });
         v.addEventListener('loadeddata', () => {
           v.removeEventListener('error', clearAttemptingPlay);
-          v.currentTime = at.sourceTime;
-          attemptPlay(v)
-            .then(() => {
-              setIsPlaying(true);
-              playAllAudioAtTime(currentTime, true);
-            })
-            .catch(() => {
-              setIsPlaying(false);
-              setShowContinueOverlay(true);
-              playAllAudioAtTime(currentTime, false);
-            })
-            .finally(clearAttemptingPlay);
+          try {
+            v.currentTime = at.sourceTime;
+            attemptPlayWhenReady(v)
+              .then(() => {
+                setIsPlaying(true);
+                playAllAudioAtTime(currentTime, true);
+              })
+              .catch(() => {
+                setIsPlaying(false);
+                setShowContinueOverlay(true);
+                playAllAudioAtTime(currentTime, false);
+              })
+              .finally(clearAttemptingPlay);
+          } catch (err) {
+            clearAttemptingPlay();
+          }
         }, { once: true });
         return;
       }
@@ -1479,17 +1512,21 @@ function VideoEditorInner(
         currentClipIndexRef.current = at.clipIndex;
       }
       startAttemptingPlay();
-      attemptPlay(v)
-        .then(() => {
-          setIsPlaying(true);
-          playAllAudioAtTime(currentTime, true);
-        })
-        .catch(() => {
-          setIsPlaying(false);
-          setShowContinueOverlay(true);
-          try { playAllAudioAtTime(currentTime, false); } catch {}
-        })
-        .finally(clearAttemptingPlay);
+      try {
+        attemptPlayWhenReady(v)
+          .then(() => {
+            setIsPlaying(true);
+            playAllAudioAtTime(currentTime, true);
+          })
+          .catch(() => {
+            setIsPlaying(false);
+            setShowContinueOverlay(true);
+            try { playAllAudioAtTime(currentTime, false); } catch {}
+          })
+          .finally(clearAttemptingPlay);
+      } catch (err) {
+        clearAttemptingPlay();
+      }
       return;
     }
 
@@ -1506,16 +1543,20 @@ function VideoEditorInner(
       videoFinishedRef.current = false;
       setVideoFinished(false);
       startAttemptingPlay();
-      attemptPlay(v)
-        .then(() => {
-          setIsPlaying(true);
-          playAllAudioAtTime(currentTime, true);
-        })
-        .catch(() => {
-          setIsPlaying(false);
-          setShowContinueOverlay(true);
-        })
-        .finally(clearAttemptingPlay);
+      try {
+        attemptPlayWhenReady(v)
+          .then(() => {
+            setIsPlaying(true);
+            playAllAudioAtTime(currentTime, true);
+          })
+          .catch(() => {
+            setIsPlaying(false);
+            setShowContinueOverlay(true);
+          })
+          .finally(clearAttemptingPlay);
+      } catch (err) {
+        clearAttemptingPlay();
+      }
     }
   };
 
@@ -1730,16 +1771,16 @@ function VideoEditorInner(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedClip, splitSpecificVideoClip, splitSpecificAudioClip, undo]);
 
-  // Converte a posição X (na viewport) em tempo da timeline, considerando scroll + zoom
+  // Converte a posição X (na viewport) em tempo da timeline, considerando scroll + zoom.
+  // Usa o scrollWidth do container de scroll para régua e timeline usarem a mesma referência.
   const getTimeFromClientX = useCallback((clientX: number) => {
-    if (!timelineScrollRef.current || !timelineRef.current || timelineDuration <= 0) return 0;
+    if (!timelineScrollRef.current || timelineDuration <= 0) return 0;
     const scrollEl = timelineScrollRef.current;
-    const contentEl = timelineRef.current;
     const scrollRect = scrollEl.getBoundingClientRect();
     const xInViewport = clientX - scrollRect.left;
     const clampedViewport = Math.max(0, Math.min(scrollRect.width, xInViewport));
     const xTotal = scrollEl.scrollLeft + clampedViewport;
-    const contentWidth = contentEl.scrollWidth || scrollEl.scrollWidth;
+    const contentWidth = scrollEl.scrollWidth;
     if (!contentWidth || contentWidth <= 0) return 0;
     const pct = Math.max(0, Math.min(1, xTotal / contentWidth));
     return pct * timelineDuration;
