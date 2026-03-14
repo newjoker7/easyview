@@ -2276,7 +2276,7 @@ function VideoEditorInner(
             >
               <div
                 style={{ width: `${timelineZoom * 100}%`, minWidth: '100%' }}
-                className="flex flex-col"
+                className="flex flex-col relative"
               >
             <div
               ref={rulerRef}
@@ -2384,11 +2384,8 @@ function VideoEditorInner(
                     initial={false}
                     animate={{ width: `${progressPct}%` }}
                     transition={{ type: 'spring', stiffness: 300, damping: 35 }}
-                  >
-                    {/* Indicador vermelho exatamente na borda do progresso */}
-                    <div className="absolute top-0 bottom-0 right-0 w-1 bg-rose-500 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.6)]" />
-                  </motion.div>
-                  {/* playhead visual segue exatamente o progresso */}
+                  />
+                  {/* barra de progresso (avermelhado) — posição do indicador segue esta largura */}
                 </>
               )}
             </motion.div>
@@ -2503,7 +2500,16 @@ function VideoEditorInner(
                 })}
               </div>
             )}
-            {/* Playhead visual agora é a borda direita da barra de progresso */}
+            {/* Indicador vermelho em altura total (régua + vídeo + áudio), mesma posição que o fim do avermelhado */}
+            <motion.div
+              className="absolute top-0 bottom-0 w-1.5 bg-rose-500 rounded-full shadow-[0_0_12px_rgba(244,63,94,0.7)] z-20 pointer-events-none"
+              style={{ left: `${progressPct}%`, transform: 'translateX(-50%)' }}
+              initial={false}
+              animate={{ left: `${progressPct}%` }}
+              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+            >
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-rose-500 rounded-full border-2 border-zinc-900 shadow-lg" />
+            </motion.div>
             </div>
               </div>
             </div>
