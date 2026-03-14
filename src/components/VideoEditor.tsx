@@ -412,7 +412,8 @@ function VideoEditorInner(
 
   const seekToTime = useCallback(
     (t: number) => {
-      const clamped = Math.max(0, Math.min(timelineDuration, t));
+      const tSafe = Number.isFinite(t) ? t : 0;
+      const clamped = Math.max(0, Math.min(timelineDuration, tSafe));
       setCurrentTime(clamped);
       // if we have video clips, map to video; otherwise sync audios only
       if (clips.length === 0) {
@@ -1436,7 +1437,10 @@ function VideoEditorInner(
         currentClipUrlRef.current = at.clip.url;
         currentClipIndexRef.current = at.clipIndex;
         v.load();
+        const clearAttempting = () => setIsAttemptingPlay(false);
+        v.addEventListener('error', clearAttempting, { once: true });
         v.addEventListener('loadeddata', () => {
+          v.removeEventListener('error', clearAttempting);
           v.currentTime = at.sourceTime;
           attemptPlay(v)
             .then(() => {
@@ -1759,11 +1763,8 @@ function VideoEditorInner(
 
   const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!rulerRef.current || timelineDuration <= 0) return;
-    // Mapeia linearmente a posição X clicada para o tempo na timeline
-    const rect = rulerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const frac = Math.max(0, Math.min(1, x / rect.width));
-    const time = frac * timelineDuration;
+    // Usar a mesma lógica da timeline: posição considerando scroll + zoom
+    const time = getTimeFromClientX(e.clientX);
     seekToTime(time);
     setIsPlaying(false);
     videoRef.current?.pause();
