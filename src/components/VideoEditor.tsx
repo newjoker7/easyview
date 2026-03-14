@@ -310,10 +310,12 @@ function VideoEditorInner(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const PLAY_ATTEMPT_TIMEOUT_MS = 8000;
+
   const attemptPlay = useCallback((v: HTMLVideoElement | null, maxRetries = 3) => {
-    return new Promise<void>((resolve, reject) => {
-      if (!v) return reject(new Error('no-video'));
-      tryPlayRetriesRef.current = 0;
+    if (!v) return Promise.reject(new Error('no-video'));
+    tryPlayRetriesRef.current = 0;
+    const playPromise = new Promise<void>((resolve, reject) => {
       const tryOnce = () => {
         v.play()
           .then(() => {
@@ -332,6 +334,10 @@ function VideoEditorInner(
       };
       tryOnce();
     });
+    const timeoutPromise = new Promise<void>((_, rej) =>
+      setTimeout(() => rej(new Error('play-timeout')), PLAY_ATTEMPT_TIMEOUT_MS)
+    );
+    return Promise.race([playPromise, timeoutPromise]);
   }, []);
 
   const totalDuration = useMemo(
@@ -1292,6 +1298,7 @@ function VideoEditorInner(
         currentClipIndexRef.current = i + 1;
         if (wasPlayingNow) {
           attemptPlay(video).catch(() => {
+            setIsAttemptingPlay(false);
             setShowContinueOverlay(true);
             try { playAllAudioAtTime(startTimesArr[i + 1], true); } catch {}
           });
@@ -1365,6 +1372,7 @@ function VideoEditorInner(
       pendingSwitchRef.current = null;
       if (playAfter) {
         attemptPlay(video).catch(() => {
+          setIsAttemptingPlay(false);
           setShowContinueOverlay(true);
           try { playAllAudioAtTime(newTimelineTime, true); } catch {}
         });
@@ -1379,7 +1387,10 @@ function VideoEditorInner(
 
   const handleEnded = () => {
     const i = currentClipIndexRef.current;
-    if (i + 1 < clips.length) return;
+    if (i + 1 < clips.length) {
+      performSwitchToNextClip();
+      return;
+    }
     const videoEnd = startTimes[clips.length - 1] + (clips[clips.length - 1].end - clips[clips.length - 1].start);
     if (videoEnd < timelineDuration) {
       // Video finished but timeline still has audio: keep overall playback active
@@ -1519,6 +1530,11 @@ function VideoEditorInner(
     }
 
     const v = videoRef.current;
+    // Sincronizar estado: se o vídeo pausou sem disparar onPause (ex.: stall), corrigir isPlaying
+    if (v && v.src && !videoFinished && v.paused && !isSwitchingRef.current) {
+      setIsPlaying(false);
+      return;
+    }
     // consider video still playing only if it has a source, is not in the 'finished' state,
     // and is actually playing (not paused). If video is paused (e.g. autoplay blocked),
     // fall back to RAF so the playhead and audios continue.
