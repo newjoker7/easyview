@@ -89,6 +89,8 @@ function getClipName(c: Clip, fallback?: string) {
 }
 
 const CAPTION_TOLERANCE_SEC = 0.06;
+/** Quando há gap antes do segmento, só mostrar a legenda após este atraso (evita aparecer no silêncio). */
+const CAPTION_START_DELAY_AFTER_GAP_SEC = 0.15;
 
 function CaptionOverlay({
   videoRef,
@@ -120,17 +122,27 @@ function CaptionOverlay({
           // A tolerância fica apenas no fim para evitar “piscar” no limite.
           const clipStart = clipStartRef.current;
           const clipEnd = clip.end ?? clipStart + 1;
-          const seg = currentSegs?.length
-            ? currentSegs.find((s) => {
+          const sorted = [...(currentSegs ?? [])].sort((a, b) => {
+            const aStart = a.start >= clipStart - 0.01 && a.end <= clipEnd + 0.01 ? a.start - clipStart : a.start;
+            const bStart = b.start >= clipStart - 0.01 && b.end <= clipEnd + 0.01 ? b.start - clipStart : b.start;
+            return aStart - bStart;
+          });
+          const seg = sorted.find((s, idx) => {
             const inClipRange = s.start >= clipStart - 0.01 && s.end <= clipEnd + 0.01;
             const segStart = inClipRange ? s.start - clipStart : s.start;
             const segEnd = inClipRange ? s.end - clipStart : s.end;
+            const prevEnd = idx > 0 ? (() => {
+              const p = sorted[idx - 1];
+              const pInRange = p.start >= clipStart - 0.01 && p.end <= clipEnd + 0.01;
+              return pInRange ? p.end - clipStart : p.end;
+            })() : -1;
+            const hasGapBefore = prevEnd >= 0 && segStart - prevEnd > 0.05;
+            const effectiveStart = hasGapBefore ? segStart + CAPTION_START_DELAY_AFTER_GAP_SEC : segStart;
             return (
-              timeInClip >= segStart &&
+              timeInClip >= effectiveStart &&
               timeInClip < segEnd + CAPTION_TOLERANCE_SEC
             );
-          })
-            : undefined;
+          });
           const next = seg?.text ?? '';
           setDisplayText((prev) => (next === prev ? prev : next));
         }
