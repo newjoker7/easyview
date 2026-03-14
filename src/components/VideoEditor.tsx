@@ -1418,20 +1418,65 @@ function VideoEditorInner(
     if (clips.length > 0 && v && currentTime < videoEnd) {
       videoFinishedRef.current = false;
       setVideoFinished(false);
-      setIsAttemptingPlay(true);
-      attemptPlay(v)
-        .then(() => {
-          setIsPlaying(true);
-          playAllAudioAtTime(currentTime, true);
-        })
-        .catch(() => {
-          setIsPlaying(false);
-          setShowContinueOverlay(true);
-          try { playAllAudioAtTime(currentTime, false); } catch {}
-        })
-        .finally(() => {
-          setIsAttemptingPlay(false);
-        });
+      const at = getClipAtTime(currentTime);
+      if (at) {
+        v.currentTime = at.sourceTime;
+        currentClipIndexRef.current = at.clipIndex;
+        if (currentClipUrlRef.current !== at.clip.url) {
+          setIsAttemptingPlay(true);
+          v.src = at.clip.url;
+          currentClipUrlRef.current = at.clip.url;
+          v.load();
+          v.addEventListener('loadeddata', () => {
+            v.currentTime = at.sourceTime;
+            currentClipIndexRef.current = at.clipIndex;
+            attemptPlay(v)
+              .then(() => {
+                setIsPlaying(true);
+                playAllAudioAtTime(currentTime, true);
+              })
+              .catch(() => {
+                setIsPlaying(false);
+                setShowContinueOverlay(true);
+                playAllAudioAtTime(currentTime, false);
+              })
+              .finally(() => setIsAttemptingPlay(false));
+          }, { once: true });
+        } else {
+          setIsAttemptingPlay(true);
+          const doPlay = () => {
+            attemptPlay(v)
+              .then(() => {
+                setIsPlaying(true);
+                playAllAudioAtTime(currentTime, true);
+              })
+              .catch(() => {
+                setIsPlaying(false);
+                setShowContinueOverlay(true);
+                try { playAllAudioAtTime(currentTime, false); } catch {}
+              })
+              .finally(() => setIsAttemptingPlay(false));
+          };
+          if (v.readyState >= 2) {
+            doPlay();
+          } else {
+            v.addEventListener('loadeddata', () => doPlay(), { once: true });
+          }
+        }
+      } else {
+        setIsAttemptingPlay(true);
+        attemptPlay(v)
+          .then(() => {
+            setIsPlaying(true);
+            playAllAudioAtTime(currentTime, true);
+          })
+          .catch(() => {
+            setIsPlaying(false);
+            setShowContinueOverlay(true);
+            try { playAllAudioAtTime(currentTime, false); } catch {}
+          })
+          .finally(() => setIsAttemptingPlay(false));
+      }
       return;
     }
 
