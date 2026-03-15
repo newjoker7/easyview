@@ -200,6 +200,28 @@ app.post('/convert', upload.single('file'), (req, res) => {
 });
 
 // --- Transcrição de áudio (extração de legenda do vídeo) via Whisper ---
+/** Converte tempo para segundos: número ou string "HH:MM:SS.mmm" / "MM:SS.mmm" / "SS.mmm". */
+function parseTimeToSeconds(val) {
+  if (val == null) return NaN;
+  const n = Number(val);
+  if (Number.isFinite(n)) return n;
+  const s = String(val).trim();
+  if (!s) return NaN;
+  const parts = s.replace(',', '.').split(':');
+  if (parts.length === 3) {
+    const h = parseInt(parts[0], 10) || 0;
+    const m = parseInt(parts[1], 10) || 0;
+    const sec = parseFloat(parts[2]) || 0;
+    return h * 3600 + m * 60 + sec;
+  }
+  if (parts.length === 2) {
+    const m = parseInt(parts[0], 10) || 0;
+    const sec = parseFloat(parts[1]) || 0;
+    return m * 60 + sec;
+  }
+  return parseFloat(parts[0]) || NaN;
+}
+
 function parseSrtToSegments(srtContent) {
   const segments = [];
   const blocks = srtContent.split(/\n\s*\n/).filter((b) => b.trim());
@@ -218,30 +240,41 @@ function parseSrtToSegments(srtContent) {
 }
 
 function tryBuildSegmentsFromWhisperJson(jsonObj) {
-  // Cada segmento do Whisper tem start/end (nivel segmento) e words[]. O inicio do trecho
-  // deve ser o start do segmento, nao o start da primeira palavra (que pode coincidir com o fim do anterior).
-  const rawSegments = Array.isArray(jsonObj?.segments) ? jsonObj.segments : null;
+  if (!jsonObj) return null;
+  const rawSegments = Array.isArray(jsonObj) ? jsonObj : (Array.isArray(jsonObj?.segments) ? jsonObj.segments : null);
   const words = [];
   if (rawSegments) {
     for (const s of rawSegments) {
-      const segStart = Number(s?.start);
-      const segEnd = Number(s?.end);
-      const w = Array.isArray(s?.words) ? s.words : null;
-      if (!w) continue;
+      const segStart = parseTimeToSeconds(s?.start);
+      const segEnd = parseTimeToSeconds(s?.end);
       const useSegStart = Number.isFinite(segStart);
       const useSegEnd = Number.isFinite(segEnd);
-      for (const wi of w) {
-        const start = Number(wi?.start);
-        const end = Number(wi?.end);
-        const text = String(wi?.word ?? wi?.text ?? '').trim();
-        if (!Number.isFinite(start) || !Number.isFinite(end) || !text) continue;
-        words.push({
-          start,
-          end: Math.max(end, start),
-          text,
-          segmentStart: useSegStart ? segStart : start,
-          segmentEnd: useSegEnd ? segEnd : end,
-        });
+      const w = Array.isArray(s?.words) ? s.words : null;
+      if (w?.length) {
+        for (const wi of w) {
+          const start = parseTimeToSeconds(wi?.start);
+          const end = parseTimeToSeconds(wi?.end);
+          const text = String(wi?.word ?? wi?.text ?? '').trim();
+          if (!Number.isFinite(start) || !Number.isFinite(end) || !text) continue;
+          words.push({
+            start,
+            end: Math.max(end, start),
+            text,
+            segmentStart: useSegStart ? segStart : start,
+            segmentEnd: useSegEnd ? segEnd : end,
+          });
+        }
+      } else {
+        const segText = String(s?.text ?? s?.speech ?? '').trim();
+        if (segText && useSegStart && useSegEnd && segStart < segEnd) {
+          words.push({
+            start: segStart,
+            end: segEnd,
+            text: segText,
+            segmentStart: segStart,
+            segmentEnd: segEnd,
+          });
+        }
       }
     }
   }
