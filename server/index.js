@@ -218,19 +218,30 @@ function parseSrtToSegments(srtContent) {
 }
 
 function tryBuildSegmentsFromWhisperJson(jsonObj) {
-  // Formatos possíveis variam; tentamos encontrar words com {start,end,text}
+  // Cada segmento do Whisper tem start/end (nivel segmento) e words[]. O inicio do trecho
+  // deve ser o start do segmento, nao o start da primeira palavra (que pode coincidir com o fim do anterior).
   const rawSegments = Array.isArray(jsonObj?.segments) ? jsonObj.segments : null;
   const words = [];
   if (rawSegments) {
     for (const s of rawSegments) {
+      const segStart = Number(s?.start);
+      const segEnd = Number(s?.end);
       const w = Array.isArray(s?.words) ? s.words : null;
       if (!w) continue;
+      const useSegStart = Number.isFinite(segStart);
+      const useSegEnd = Number.isFinite(segEnd);
       for (const wi of w) {
         const start = Number(wi?.start);
         const end = Number(wi?.end);
         const text = String(wi?.word ?? wi?.text ?? '').trim();
         if (!Number.isFinite(start) || !Number.isFinite(end) || !text) continue;
-        words.push({ start, end: Math.max(end, start), text });
+        words.push({
+          start,
+          end: Math.max(end, start),
+          text,
+          segmentStart: useSegStart ? segStart : start,
+          segmentEnd: useSegEnd ? segEnd : end,
+        });
       }
     }
   }
@@ -244,13 +255,13 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
   let cur = null;
   for (const w of words) {
     if (!cur) {
-      cur = { start: w.start, end: w.end, parts: [w.text] };
+      cur = { start: w.segmentStart ?? w.start, end: w.end, parts: [w.text] };
       continue;
     }
     const gap = Math.max(0, w.start - cur.end);
     if (gap >= GAP_BREAK_SEC) {
       out.push({ start: cur.start, end: cur.end, text: cur.parts.join(' ').trim() });
-      cur = { start: w.start, end: w.end, parts: [w.text] };
+      cur = { start: w.segmentStart ?? w.start, end: w.end, parts: [w.text] };
     } else {
       cur.parts.push(w.text);
       cur.end = Math.max(cur.end, w.end);
