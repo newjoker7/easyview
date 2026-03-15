@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+/** Ative (true) para ver no console os valores de sincronização da legenda a cada ~500ms. */
+const DEBUG_CAPTION = false;
+
 export interface CaptionOverlayClip {
   id?: string;
   start?: number;
@@ -43,7 +46,12 @@ export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayPro
       return;
     }
 
+    if (DEBUG_CAPTION) {
+      console.log('[CaptionOverlay] segmentos (start, end em s relativo ao clipe):', segsRef.current?.map((s, i) => ({ i, start: s.start, end: s.end, text: s.text?.slice(0, 40) })));
+    }
+
     let rafId: number;
+    let lastLog = 0;
     const tick = () => {
       const vt = video.currentTime;
       if (!Number.isFinite(vt) || vt < clipStart - 0.02 || vt > clipEnd + 0.02) {
@@ -53,9 +61,25 @@ export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayPro
       }
       const timeInClip = vt - clipStart;
       const list = segsRef.current ?? [];
-      // Só mostra legenda dentro de um segmento; entre segmentos = intervalo = nada.
+      // Verificação do intervalo entre falas:
+      // - Se timeInClip está em [seg.start, seg.end) → mostra legenda desse segmento.
+      // - Se timeInClip está entre seg[i].end e seg[i+1].start → nenhum segmento dá match → legenda em branco.
       const segment = list.find((s) => timeInClip >= s.start && timeInClip < s.end);
       setActiveText(segment?.text?.trim() ?? '');
+
+      if (DEBUG_CAPTION && typeof performance !== 'undefined' && performance.now() - lastLog >= 500) {
+        lastLog = performance.now();
+        const idx = segment != null ? list.indexOf(segment) : -1;
+        console.log('[CaptionOverlay]', {
+          vt: Math.round(vt * 1000) / 1000,
+          clipStart,
+          clipEnd,
+          timeInClip: Math.round(timeInClip * 1000) / 1000,
+          segmentIndex: idx,
+          segment: segment ? { start: segment.start, end: segment.end, text: segment.text?.slice(0, 30) } : null,
+          totalSegments: list.length,
+        });
+      }
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
