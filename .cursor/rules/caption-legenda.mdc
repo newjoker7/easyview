@@ -1,23 +1,33 @@
 ---
-description: Extração e exibição de legendas (TextTrack, contrato clip-relative)
-globs: src/components/CaptionOverlay.tsx, src/components/LegendaModal.tsx, src/services/api.ts
+description: Extração e exibição de legendas (display offset + RAF)
+globs: src/components/CaptionOverlay.tsx, src/components/LegendaModal.tsx, src/services/captionSegments.ts, src/services/api.ts
 alwaysApply: false
 ---
 
 # Legendas (captions)
 
+## Problema conhecido
+
+APIs de transcrição (ex.: Whisper) costumam devolver o `start` do segmento **antes** do início audível da fala. A legenda não pode aparecer antes da fala.
+
+## Estratégia em duas camadas
+
+1. **Backend (server):** Ao devolver segmentos (JSON ou SRT), aplicar atraso no início: `applySegmentStartDelay(segments, CAPTION_START_DELAY_SEC)` (ex.: 0,5 s). Assim o `start` já vem “atrasado” para coincidir com a fala.
+2. **Frontend (exibição):** Usar `toDisplaySegments(segments, CAPTION_DISPLAY_START_OFFSET_SEC)` em `CaptionOverlay`: a legenda só é exibida quando `timeInClip >= seg.start + offset` (ex.: +0,2 s). Isso evita aparecer antes da fala mesmo que a API ainda antecipe um pouco.
+
 ## Contrato de tempo
 
-- **Guardar sempre em tempo relativo ao clipe:** 0 = início do clipe, `duration` = fim. A API pode devolver absoluto; normalizar na extração (LegendaModal) antes de `onSave`.
-- **Exibição:** CaptionOverlay usa `clip.start + seg.start` e `clip.start + seg.end` para criar VTTCues (tempo no ficheiro = tempo do vídeo).
+- **Guardar sempre em tempo relativo ao clipe:** 0 = início do clipe. A API pode devolver absoluto; normalizar com `normalizeToClipRelative()` na extração (LegendaModal) antes de `onSave`.
+- **Exibição:** `timeInClip = video.currentTime - clip.start`. Comparar com segmentos **de exibição** (já com offset aplicado via `toDisplaySegments`).
 
 ## Tecnologia de sincronização
 
-- Usar **TextTrack + VTTCue** no elemento de vídeo. O browser dispara `cuechange` quando o tempo de reprodução entra/sai de um cue; não usar requestAnimationFrame para decidir qual segmento mostrar.
-- Criar um track com `video.addTextTrack('captions', label, 'pt')`, adicionar cues com `new VTTCue(mediaStart, mediaEnd, text)`, `track.mode = 'showing'`, e subscrever `track.addEventListener('cuechange', ...)` para atualizar o texto exibido no overlay (estilo aplicado no React).
+- **CaptionOverlay:** `requestAnimationFrame` para ler `video.currentTime` com boa precisão; só atualizar estado React quando o segmento ativo muda. Usar segmentos devolvidos por `toDisplaySegments()` (não os segmentos “brutos”).
+- **captionSegments.ts:** `normalizeToClipRelative()` para normalizar resposta da API; `toDisplaySegments()` para atrasar o início da exibição e obter a lista usada no overlay.
 
 ## Ficheiros
 
-- `CaptionOverlay.tsx`: overlay que cria o TextTrack, adiciona VTTCues a partir de `clip.captionSegments`, e mostra o texto do cue ativo com o estilo do projeto.
-- `LegendaModal.tsx`: extrai segmentos via `transcribeVideo`, normaliza para clip-relative se a API devolver absoluto, e guarda com `onSave(..., segments)`.
-- `api.ts`: `CaptionSegment` e comentário do contrato; `transcribeVideo(url, start, end)`.
+- `CaptionOverlay.tsx`: overlay que usa `toDisplaySegments(clip.captionSegments)` e um loop RAF para definir o texto ativo; mostra só quando `timeInClip` está em `[seg.start, seg.end)` dos segmentos de exibição.
+- `LegendaModal.tsx`: extrai via `transcribeVideo`, normaliza com `normalizeToClipRelative`, guarda com `onSave(..., segments)`.
+- `server/index.js`: `/transcribe` aplica `applySegmentStartDelay` tanto no caminho JSON como no SRT.
+- `api.ts`: `CaptionSegment` e `transcribeVideo(url, start, end)`.
