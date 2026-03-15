@@ -64,15 +64,30 @@ export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayPro
       track.mode = 'showing';
 
       const onCueChange = () => {
+        const vt = video.currentTime;
+        if (vt < clipStart - 0.02 || vt > clipEnd + 0.02) {
+          setDisplayText('');
+          return;
+        }
         const active = track!.activeCues;
-        const text = active?.length ? (active[0] as VTTCue).text : '';
-        setDisplayText(text);
+        if (!active || active.length === 0) {
+          setDisplayText('');
+          return;
+        }
+        const cue = active[0] as VTTCue;
+        if (vt >= cue.startTime && vt < cue.endTime) {
+          setDisplayText(cue.text);
+        } else {
+          setDisplayText('');
+        }
       };
       track.addEventListener('cuechange', onCueChange);
+      video.addEventListener('timeupdate', onCueChange);
       onCueChange();
 
       return () => {
         track.removeEventListener('cuechange', onCueChange);
+        video.removeEventListener('timeupdate', onCueChange);
         cuesRef.current.forEach((c) => {
           try {
             track!.removeCue(c);
