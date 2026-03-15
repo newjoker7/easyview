@@ -65,6 +65,12 @@ export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayPro
       // - Se timeInClip está em [seg.start, seg.end) → mostra legenda desse segmento.
       // - Se timeInClip está entre seg[i].end e seg[i+1].start → nenhum segmento dá match → legenda em branco.
       const segment = list.find((s) => timeInClip >= s.start && timeInClip < s.end);
+      
+
+      console.log('timeInClip', timeInClip);
+      console.log('segment.start', segment?.start);
+      console.log('segment.end', segment?.end);
+      console.log('segment', segment?.text?.trim() ?? '');
       setActiveText(segment?.text?.trim() ?? '');
 
       if (DEBUG_CAPTION && typeof performance !== 'undefined' && performance.now() - lastLog >= 500) {
