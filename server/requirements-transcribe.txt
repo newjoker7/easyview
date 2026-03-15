@@ -1,0 +1,5 @@
+# Transcrição de áudio (legendas) com faster-whisper.
+# Instalar: pip3 install -r requirements-transcribe.txt
+# (Se pip não existir: sudo apt install python3-pip)
+# O modelo "tiny" é descarregado automaticamente na primeira execução.
+faster-whisper>=1.0.0

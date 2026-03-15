@@ -1,10 +1,32 @@
 # Opções gratuitas para extração de legendas (transcrição)
 
-O projeto usa atualmente **nodejs-whisper** para transcrever o áudio e obter segmentos com start/end. Todas as alternativas abaixo são **gratuitas** (open source ou free tier).
+O servidor tenta primeiro **faster-whisper** (Python); se não estiver instalado ou falhar, usa **nodejs-whisper**. Todas as opções são **gratuitas**.
 
 ---
 
-## 1. nodejs-whisper (atual)
+## 1. faster-whisper (recomendado, usado primeiro)
+
+- **O quê:** Whisper em Python, em geral com timestamps mais estáveis.
+- **Ficheiros:** `server/transcribe_faster_whisper.py`, `server/requirements-transcribe.txt`.
+- **Instalação no servidor:**
+  - Se `pip` não existir, instale primeiro (Linux/Debian/Ubuntu):
+    ```bash
+    sudo apt update
+    sudo apt install python3-pip
+    ```
+  - Depois, na pasta do servidor:
+    ```bash
+    cd server
+    pip3 install -r requirements-transcribe.txt
+    ```
+    (Se `pip3` falhar, tente: `python3 -m pip install -r requirements-transcribe.txt`.)
+  - Na primeira execução o modelo "tiny" é descarregado.
+- **Requisito:** Python 3.8+ e `python` ou `python3` no PATH. O Node chama o script após extrair o WAV com ffmpeg.
+- Se o script devolver segmentos, a resposta usa-os e o nodejs-whisper não é chamado.
+
+---
+
+## 2. nodejs-whisper (fallback)
 
 - **O quê:** Bindings Node para o Whisper (OpenAI).
 - **Instalação:** `npm i nodejs-whisper` (no servidor) e `npx nodejs-whisper download` para o modelo.
@@ -13,7 +35,7 @@ O projeto usa atualmente **nodejs-whisper** para transcrever o áudio e obter se
 
 ---
 
-## 2. Usar apenas o SRT do nodejs-whisper
+## 3. Usar apenas o SRT do nodejs-whisper
 
 O próprio Whisper gera um ficheiro `.srt`. Por vezes os limites no SRT são mais estáveis que no JSON.
 
@@ -22,7 +44,7 @@ O próprio Whisper gera um ficheiro `.srt`. Por vezes os limites no SRT são mai
 
 ---
 
-## 3. Vosk (alternativa local, gratuita)
+## 4. Vosk (alternativa local, gratuita)
 
 - **O quê:** Motor de reconhecimento de voz offline (Kaldi), com bindings Node.
 - **npm:** `vosk`
@@ -32,23 +54,13 @@ O próprio Whisper gera um ficheiro `.srt`. Por vezes os limites no SRT são mai
 
 ---
 
-## 4. faster-whisper (Python)
-
-- **O quê:** Implementação do Whisper em Python, em geral mais rápida e por vezes com timestamps melhores.
-- **Instalação:** `pip install faster-whisper`.
-- **Uso:** Script Python que recebe o WAV e devolve JSON com segmentos (start/end/text). O servidor Node chama o script (ex.: `child_process.spawn`) e lê o resultado.
-- **Vantagens:** Gratuito, local, costuma ter timestamps de segmento mais consistentes.
-- **Desvantagens:** Depende de Python no servidor e de um pequeno script de integração.
-
----
-
-## 5. APIs gratuitas (limite de uso)
+## 5. APIs (limite de uso)
 
 - **Whisper API (OpenAI):** Pago por uso; não é gratuita.
 - **Google Speech-to-Text:** Free tier limitado (minutos por mês).
 - **Outras (e.g. Azure, AWS):** Free tier com limites.
 
-Para manter **100% gratuito e sob seu controlo**, as opções práticas são: **nodejs-whisper** (atual), **usar só SRT** (variável acima), **Vosk** ou **faster-whisper** via script.
+Para manter **100% gratuito e sob seu controlo**, use **faster-whisper** (instale Python + `pip install faster-whisper`) ou, em alternativa, **nodejs-whisper**, **SRT apenas** ou **Vosk**.
 
 ---
 
@@ -56,7 +68,7 @@ Para manter **100% gratuito e sob seu controlo**, as opções práticas são: **
 
 | Opção                    | Custo   | Onde corre | Integração atual      |
 |--------------------------|--------|------------|------------------------|
-| nodejs-whisper           | Grátis | Servidor   | Sim (JSON + SRT)       |
-| SRT apenas (mesmo Whisper)| Grátis | Servidor   | Sim (`TRANSCRIBE_USE_SRT_ONLY=1`) |
+| faster-whisper (Python) | Grátis | Servidor   | Sim (tentado primeiro) |
+| nodejs-whisper           | Grátis | Servidor   | Sim (fallback)         |
+| SRT apenas               | Grátis | Servidor   | Sim (`TRANSCRIBE_USE_SRT_ONLY=1`) |
 | Vosk                     | Grátis | Servidor   | Não (a adicionar)      |
-| faster-whisper (Python)  | Grátis | Servidor   | Não (script externo)   |

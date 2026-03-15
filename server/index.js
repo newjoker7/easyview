@@ -396,6 +396,12 @@ app.post('/transcribe', express.json(), async (req, res) => {
     ffArgs.push('-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audioPath);
     await runFfmpeg(ffArgs);
 
+    const fasterSegments = await runFasterWhisper(audioPath);
+    if (fasterSegments && fasterSegments.length > 0) {
+      for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
+      return res.json({ segments: fasterSegments });
+    }
+
     let nodewhisper;
     try {
       const mod = await import('nodejs-whisper');
@@ -488,6 +494,30 @@ function runFfmpeg(args, opts = {}) {
     ff.on('error', (e) => reject(e));
     ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(err || `exit ${code}`))));
   });
+}
+
+/** Tenta transcrição com faster-whisper (Python). Retorna array de segmentos ou null se falhar. */
+function runFasterWhisper(wavPath) {
+  const scriptPath = path.join(__dirname, 'transcribe_faster_whisper.py');
+  if (!fs.existsSync(scriptPath)) return Promise.resolve(null);
+  const tryRun = (pythonCmd) =>
+    new Promise((resolve) => {
+      const py = spawn(pythonCmd, [scriptPath, wavPath], { cwd: __dirname });
+      let stdout = '';
+      py.stdout.on('data', (d) => { stdout += d.toString(); });
+      py.on('error', () => resolve(null));
+      py.on('close', (code) => {
+        if (code !== 0) return resolve(null);
+        try {
+          const out = JSON.parse(stdout.trim());
+          if (out?.segments && Array.isArray(out.segments) && out.segments.length > 0) {
+            return resolve(out.segments);
+          }
+        } catch {}
+        resolve(null);
+      });
+    });
+  return tryRun('python3').then((s) => s || tryRun('python'));
 }
 
 function buildVideoFilter(filterType, filterIntensity) {
