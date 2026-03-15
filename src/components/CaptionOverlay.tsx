@@ -16,8 +16,10 @@ interface CaptionOverlayProps {
 }
 
 /**
- * Exibe legenda sincronizada: só mostra texto quando timeInClip está dentro de [seg.start, seg.end).
- * Usa os segmentos tal como vêm (sem offset). Atualização por timeupdate.
+ * Exibe legenda respeitando os intervalos das falas:
+ * - Durante um segmento [seg.start, seg.end): mostra o texto da legenda.
+ * - Fora dos segmentos (pausas entre falas): não mostra nada — intervalo em branco.
+ * Usa RAF para limpar a legenda assim que o tempo sai do segmento.
  */
 export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayProps) {
   const [activeText, setActiveText] = useState('');
@@ -41,23 +43,25 @@ export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayPro
       return;
     }
 
-    const update = () => {
+    let rafId: number;
+    const tick = () => {
       const vt = video.currentTime;
       if (!Number.isFinite(vt) || vt < clipStart - 0.02 || vt > clipEnd + 0.02) {
         setActiveText('');
+        rafId = requestAnimationFrame(tick);
         return;
       }
       const timeInClip = vt - clipStart;
       const list = segsRef.current ?? [];
+      // Só mostra legenda dentro de um segmento; entre segmentos = intervalo = nada.
       const segment = list.find((s) => timeInClip >= s.start && timeInClip < s.end);
       setActiveText(segment?.text?.trim() ?? '');
+      rafId = requestAnimationFrame(tick);
     };
-
-    video.addEventListener('timeupdate', update);
-    update();
+    rafId = requestAnimationFrame(tick);
 
     return () => {
-      video.removeEventListener('timeupdate', update);
+      cancelAnimationFrame(rafId);
       setActiveText('');
     };
   }, [clip?.id, clip?.start, clip?.end, clip?.captionText, videoRef, hasSegments, segs.length]);
