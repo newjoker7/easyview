@@ -2,9 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 
 export interface CaptionOverlayClip {
   id?: string;
+  /** Início do clipe no ficheiro (segundos). */
   start?: number;
+  /** Fim do clipe no ficheiro (segundos). */
   end?: number;
   captionText?: string;
+  /** Segmentos em tempo relativo ao clipe: 0 = início do clipe. Sempre normalizados por captionSegments.normalizeToClipRelative. */
   captionSegments?: { start: number; end: number; text: string }[];
 }
 
@@ -15,9 +18,9 @@ interface CaptionOverlayProps {
 }
 
 /**
- * Lógica: entra o primeiro trecho de legenda → quando termina, pausa (nada) → espera → entra o próximo trecho.
- * Só mostramos texto quando o tempo está estritamente dentro de um segmento [start, end); entre segmentos mostramos nada.
- * Contrato: captionSegments em tempo relativo ao clipe (0 = início do clipe).
+ * Exibe legenda sincronizada com a fala.
+ * Regra: só mostra texto quando o tempo de vídeo está estritamente dentro de um segmento [start, end).
+ * Entre segmentos mostra nada (pausa). clip.start/clip.end = trim do clipe no ficheiro; segmentos em 0..duração do clipe.
  */
 export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayProps) {
   const [displayText, setDisplayText] = useState('');
@@ -28,39 +31,34 @@ export function CaptionOverlay({ videoRef, clip, styleProps }: CaptionOverlayPro
 
   useEffect(() => {
     const video = videoRef?.current;
-    if (!clip || !video) return;
-
-    if (hasSegments && segs?.length) {
-      const clipStart = clip.start ?? 0;
-      const clipEnd = clip.end ?? clipStart + 1;
-
-      const update = () => {
-        const vt = video.currentTime;
-        if (vt < clipStart - 0.02 || vt > clipEnd + 0.02) {
-          setDisplayText('');
-          return;
-        }
-        const timeInClip = vt - clipStart;
-        const list = segsRef.current ?? [];
-        const segment = list.find((s) => timeInClip >= s.start && timeInClip < s.end);
-        if (segment) {
-          setDisplayText(segment.text.trim());
-        } else {
-          setDisplayText('');
-        }
-      };
-
-      video.addEventListener('timeupdate', update);
-      update();
-
-      return () => {
-        video.removeEventListener('timeupdate', update);
-        setDisplayText('');
-      };
+    if (!clip || !video || !hasSegments || !segs?.length) {
+      if (clip?.captionText?.trim()) setDisplayText(clip.captionText.trim());
+      else setDisplayText('');
+      return;
     }
 
-    setDisplayText(clip.captionText?.trim() ?? '');
-    return undefined;
+    const clipStart = Number(clip.start) ?? 0;
+    const clipEnd = Number(clip.end) ?? clipStart + 1;
+
+    const update = () => {
+      const vt = video.currentTime;
+      if (Number.isFinite(vt) === false || vt < clipStart - 0.02 || vt > clipEnd + 0.02) {
+        setDisplayText('');
+        return;
+      }
+      const timeInClip = vt - clipStart;
+      const list = segsRef.current ?? [];
+      const segment = list.find((s) => timeInClip >= s.start && timeInClip < s.end);
+      setDisplayText(segment?.text?.trim() ?? '');
+    };
+
+    video.addEventListener('timeupdate', update);
+    update();
+
+    return () => {
+      video.removeEventListener('timeupdate', update);
+      setDisplayText('');
+    };
   }, [clip?.id, clip?.start, clip?.end, clip?.captionText, videoRef, hasSegments, segs?.length]);
 
   if (!styleProps || !displayText) return null;

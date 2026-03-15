@@ -30,16 +30,14 @@ export async function deleteFile(filename: string): Promise<void> {
   await fetch(`${API_URL}/files/${filename}`, { method: 'DELETE' });
 }
 /**
- * Segmento de legenda.
- * Contrato: start/end devem ser em segundos relativos ao início do clipe (0 = início do clipe).
- * O frontend normaliza na extração (LegendaModal) e na exibição usa TextTrack+VTTCue com clip.start + seg.start/end.
+ * Segmento de legenda (após normalização = tempo relativo ao clipe, ver captionSegments.ts).
  */
 export interface CaptionSegment {
   start: number;
   end: number;
   text: string;
 }
-/** Extrai legendas do áudio do vídeo (transcrição via Whisper no servidor). start/end = janela no ficheiro; segmentos devolvidos podem ser absolutos – normalizar para relativos antes de guardar. */
+/** Extrai legendas do áudio (Whisper). url + start/end em segundos no ficheiro. Resposta: segmentos (start/end em s). Normalizar com normalizeToClipRelative() antes de guardar. */
 export async function transcribeVideo(url: string, start?: number, end?: number): Promise<{ segments: CaptionSegment[] }> {
   const res = await fetch(`${API_URL}/transcribe`, {
     method: 'POST',

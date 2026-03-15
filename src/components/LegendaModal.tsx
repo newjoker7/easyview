@@ -4,6 +4,7 @@ import { X, Loader2 } from 'lucide-react';
 import type { CaptionStyleId } from './VideoEditor';
 import type { CaptionSegment } from '../services/api';
 import { transcribeVideo } from '../services/api';
+import { normalizeToClipRelative } from '../services/captionSegments';
 
 const EXAMPLE_TEXT = 'Text';
 
@@ -52,10 +53,16 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
     if (open) {
       setText(initialText);
       setStyle(selectedStyle);
-      setSegments(initialSegments || []);
+      const startRef = clipStart ?? 0;
+      const endRef = clipEnd ?? startRef + 1;
+      setSegments(
+        initialSegments?.length
+          ? normalizeToClipRelative(initialSegments, startRef, endRef)
+          : []
+      );
       setExtractError(null);
     }
-  }, [open, initialText, selectedStyle, initialSegments]);
+  }, [open, initialText, selectedStyle, initialSegments, clipStart, clipEnd]);
 
   useEffect(() => {
     return () => {
@@ -91,20 +98,10 @@ export function LegendaModal({ open, onClose, initialText, selectedStyle, clipUr
     }, stepMs);
 
     try {
-      const { segments: segs } = await transcribeVideo(clipUrl, clipStart, clipEnd);
-      const startRef = clipStart ?? 0;
-      const endRef = clipEnd ?? startRef + 1;
-      // Normalizar para tempo relativo ao clipe (0 = início do clipe), para sincronizar com o overlay.
-      const normalized =
-        segs?.map((s) => {
-          const inClipRange =
-            s.start >= startRef - 0.01 && s.end <= endRef + 0.01;
-          return {
-            ...s,
-            start: inClipRange ? s.start - startRef : s.start,
-            end: inClipRange ? s.end - startRef : s.end,
-          };
-        }) ?? [];
+      const clipStartSec = clipStart ?? 0;
+      const clipEndSec = clipEnd ?? clipStartSec + 1;
+      const { segments: rawSegs } = await transcribeVideo(clipUrl, clipStartSec, clipEndSec);
+      const normalized = normalizeToClipRelative(rawSegs ?? [], clipStartSec, clipEndSec);
       setSegments(normalized);
       if (!normalized.length) setExtractError('Nenhuma fala detectada no trecho.');
     } catch (e: unknown) {
