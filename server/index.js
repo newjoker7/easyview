@@ -424,23 +424,26 @@ app.post('/transcribe', express.json(), async (req, res) => {
       },
     });
 
-    // Preferir JSON com timestamps por palavra (mais preciso) e derivar segmentos respeitando silêncios
-    const jsonCandidates = [
-      path.join(UPLOADS_DIR, path.basename(audioPath, '.wav') + '.json'),
-      audioPath + '.json',
-    ];
-    for (const jp of jsonCandidates) {
-      if (fs.existsSync(jp)) {
-        toRemove.push(jp);
-        try {
-          const obj = JSON.parse(fs.readFileSync(jp, 'utf8'));
-          const segs = tryBuildSegmentsFromWhisperJson(obj);
-          if (segs && segs.length) {
-            for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
-            return res.json({ segments: segs });
+    const useSrtOnly = process.env.TRANSCRIBE_USE_SRT_ONLY === '1' || process.env.TRANSCRIBE_USE_SRT_ONLY === 'true';
+
+    if (!useSrtOnly) {
+      const jsonCandidates = [
+        path.join(UPLOADS_DIR, path.basename(audioPath, '.wav') + '.json'),
+        audioPath + '.json',
+      ];
+      for (const jp of jsonCandidates) {
+        if (fs.existsSync(jp)) {
+          toRemove.push(jp);
+          try {
+            const obj = JSON.parse(fs.readFileSync(jp, 'utf8'));
+            const segs = tryBuildSegmentsFromWhisperJson(obj);
+            if (segs && segs.length) {
+              for (const p of toRemove) try { fs.unlinkSync(p); } catch {}
+              return res.json({ segments: segs });
+            }
+          } catch {
+            // fallback
           }
-        } catch {
-          // fallback abaixo
         }
       }
     }
