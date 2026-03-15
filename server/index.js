@@ -242,6 +242,38 @@ function parseSrtToSegments(srtContent) {
 function tryBuildSegmentsFromWhisperJson(jsonObj) {
   if (!jsonObj) return null;
   const rawSegments = Array.isArray(jsonObj) ? jsonObj : (Array.isArray(jsonObj?.segments) ? jsonObj.segments : null);
+  if (!rawSegments?.length) return null;
+
+  const MIN_GAP_SEC = 0.05;
+  const MAX_SEGMENT_DURATION_SEC = 3.2;
+
+  const segmentLevel = [];
+  for (const s of rawSegments) {
+    const segStart = parseTimeToSeconds(s?.start);
+    const segEnd = parseTimeToSeconds(s?.end);
+    let text = String(s?.text ?? s?.speech ?? '').trim();
+    if (!text && Array.isArray(s?.words) && s.words.length) {
+      text = s.words.map((wi) => String(wi?.word ?? wi?.text ?? '').trim()).filter(Boolean).join(' ');
+    }
+    if (text && Number.isFinite(segStart) && Number.isFinite(segEnd) && segStart < segEnd) {
+      segmentLevel.push({ start: segStart, end: segEnd, text });
+    }
+  }
+  if (segmentLevel.length > 0) {
+    for (let i = 1; i < segmentLevel.length; i++) {
+      const prevEnd = segmentLevel[i - 1].end;
+      if (segmentLevel[i].start <= prevEnd + MIN_GAP_SEC) {
+        segmentLevel[i].start = prevEnd + MIN_GAP_SEC;
+        if (segmentLevel[i].end <= segmentLevel[i].start) segmentLevel[i].end = segmentLevel[i].start + 0.1;
+      }
+    }
+    return segmentLevel.map((s) => ({
+      start: s.start,
+      end: Math.min(s.end, s.start + MAX_SEGMENT_DURATION_SEC),
+      text: s.text,
+    }));
+  }
+
   const words = [];
   if (rawSegments) {
     for (const s of rawSegments) {
@@ -287,14 +319,17 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
   const out = [];
   let cur = null;
   for (const w of words) {
+    const firstWordStart = w.start;
+    const segStart = w.segmentStart ?? w.start;
+    const startCandidate = Number.isFinite(segStart) && segStart < firstWordStart ? segStart : firstWordStart;
     if (!cur) {
-      cur = { start: w.segmentStart ?? w.start, end: w.end, parts: [w.text] };
+      cur = { start: startCandidate, end: w.end, parts: [w.text] };
       continue;
     }
     const gap = Math.max(0, w.start - cur.end);
     if (gap >= GAP_BREAK_SEC) {
       out.push({ start: cur.start, end: cur.end, text: cur.parts.join(' ').trim() });
-      cur = { start: w.segmentStart ?? w.start, end: w.end, parts: [w.text] };
+      cur = { start: startCandidate, end: w.end, parts: [w.text] };
     } else {
       cur.parts.push(w.text);
       cur.end = Math.max(cur.end, w.end);
@@ -305,13 +340,19 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
   const filtered = out.filter((s) => s.text);
   if (!filtered.length) return null;
 
-  const MAX_SEGMENT_DURATION_SEC = 3.2;
-  const shifted = filtered.map((s) => ({
+  for (let i = 1; i < filtered.length; i++) {
+    const prevEnd = filtered[i - 1].end;
+    if (filtered[i].start <= prevEnd + MIN_GAP_SEC) {
+      filtered[i].start = prevEnd + MIN_GAP_SEC;
+      if (filtered[i].end <= filtered[i].start) filtered[i].end = filtered[i].start + 0.1;
+    }
+  }
+
+  return filtered.map((s) => ({
     start: s.start,
     end: Math.min(s.end, s.start + MAX_SEGMENT_DURATION_SEC),
     text: s.text,
   }));
-  return shifted;
 }
 
 app.post('/transcribe', express.json(), async (req, res) => {
