@@ -1,33 +1,18 @@
 ---
-description: Extração e exibição de legendas (display offset + RAF)
+description: Extração e exibição de legendas (tempo relativo ao clipe, sem offset)
 globs: src/components/CaptionOverlay.tsx, src/components/LegendaModal.tsx, src/services/captionSegments.ts, src/services/api.ts
 alwaysApply: false
 ---
 
 # Legendas (captions)
 
-## Problema conhecido
-
-APIs de transcrição (ex.: Whisper) costumam devolver o `start` do segmento **antes** do início audível da fala. A legenda não pode aparecer antes da fala.
-
-## Estratégia em duas camadas
-
-1. **Backend (server):** Ao devolver segmentos (JSON ou SRT), aplicar atraso no início: `applySegmentStartDelay(segments, CAPTION_START_DELAY_SEC)` (ex.: 0,5 s). Assim o `start` já vem “atrasado” para coincidir com a fala.
-2. **Frontend (exibição):** Usar `toDisplaySegments(segments, CAPTION_DISPLAY_START_OFFSET_SEC)` em `CaptionOverlay`: a legenda só é exibida quando `timeInClip >= seg.start + offset` (ex.: +0,2 s). Isso evita aparecer antes da fala mesmo que a API ainda antecipe um pouco.
-
 ## Contrato de tempo
 
-- **Guardar sempre em tempo relativo ao clipe:** 0 = início do clipe. A API pode devolver absoluto; normalizar com `normalizeToClipRelative()` na extração (LegendaModal) antes de `onSave`.
-- **Exibição:** `timeInClip = video.currentTime - clip.start`. Comparar com segmentos **de exibição** (já com offset aplicado via `toDisplaySegments`).
+- **Guardar em tempo relativo ao clipe:** 0 = início do clipe. Normalizar com `normalizeToClipRelative()` na extração (LegendaModal).
+- **Exibição:** `timeInClip = video.currentTime - clip.start`. Mostrar texto só quando `timeInClip` está em `[seg.start, seg.end)`.
 
-## Tecnologia de sincronização
+## Sincronização
 
-- **CaptionOverlay:** `requestAnimationFrame` para ler `video.currentTime` com boa precisão; só atualizar estado React quando o segmento ativo muda. Usar segmentos devolvidos por `toDisplaySegments()` (não os segmentos “brutos”).
-- **captionSegments.ts:** `normalizeToClipRelative()` para normalizar resposta da API; `toDisplaySegments()` para atrasar o início da exibição e obter a lista usada no overlay.
-
-## Ficheiros
-
-- `CaptionOverlay.tsx`: overlay que usa `toDisplaySegments(clip.captionSegments)` e um loop RAF para definir o texto ativo; mostra só quando `timeInClip` está em `[seg.start, seg.end)` dos segmentos de exibição.
-- `LegendaModal.tsx`: extrai via `transcribeVideo`, normaliza com `normalizeToClipRelative`, guarda com `onSave(..., segments)`.
-- `server/index.js`: `/transcribe` aplica `applySegmentStartDelay` tanto no caminho JSON como no SRT.
-- `api.ts`: `CaptionSegment` e `transcribeVideo(url, start, end)`.
+- **CaptionOverlay:** listener `timeupdate` no vídeo; compara `timeInClip` com `clip.captionSegments`; sem offset no início.
+- **captionSegments.ts:** apenas `normalizeToClipRelative()` para normalizar resposta da API.
+- **server/index.js:** `/transcribe` devolve segmentos tal como Whisper/SRT (sem atraso aplicado).

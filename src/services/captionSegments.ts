@@ -10,28 +10,6 @@ export interface ClipRelativeSegment {
   text: string;
 }
 
-/** Offset em segundos aplicado ao início de cada segmento para exibição (evita legenda antes da fala). */
-export const CAPTION_DISPLAY_START_OFFSET_SEC = 0.2;
-
-/**
- * Converte segmentos para "tempo de exibição": atrasa o início em que a legenda aparece.
- * Só mostra quando timeInClip >= seg.start + offset, para não exibir antes da fala.
- * Segmentos que ficariam com displayStart >= end são omitidos.
- */
-export function toDisplaySegments(
-  segments: { start: number; end: number; text: string }[],
-  startOffsetSec: number = CAPTION_DISPLAY_START_OFFSET_SEC
-): { start: number; end: number; text: string }[] {
-  if (!segments?.length || startOffsetSec <= 0) return segments ?? [];
-  const result: { start: number; end: number; text: string }[] = [];
-  for (const s of segments) {
-    const displayStart = s.start + startOffsetSec;
-    if (displayStart >= s.end) continue;
-    result.push({ start: displayStart, end: s.end, text: s.text });
-  }
-  return result;
-}
-
 /**
  * Converte segmentos da API para tempo relativo ao clipe (0 = início do clipe).
  * A API pode devolver:

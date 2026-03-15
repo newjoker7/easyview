@@ -200,25 +200,6 @@ app.post('/convert', upload.single('file'), (req, res) => {
 });
 
 // --- Transcrição de áudio (extração de legenda do vídeo) via Whisper ---
-/** Aplica atraso no INÍCIO dos segmentos (Whisper costuma colocar start antes da fala audível). */
-function applySegmentStartDelay(segments, delaySec) {
-  if (!delaySec || !segments?.length) return segments;
-  const MIN_GAP_SEC = 0.25;
-  const out = segments.map((s) => ({
-    start: s.start + delaySec,
-    end: s.end,
-    text: s.text,
-  })).filter((s) => s.start < s.end);
-  for (let i = 0; i < out.length; i++) {
-    const prevEnd = i === 0 ? 0 : out[i - 1].end;
-    out[i].start = Math.max(out[i].start, prevEnd + MIN_GAP_SEC, 0);
-    out[i].end = Math.max(out[i].end, out[i].start);
-  }
-  return out;
-}
-
-const CAPTION_START_DELAY_SEC = 0.5; // legenda só aparece após a fala ter começado (Whisper antecipa o start)
-
 function parseSrtToSegments(srtContent) {
   const segments = [];
   const blocks = srtContent.split(/\n\s*\n/).filter((b) => b.trim());
@@ -233,7 +214,7 @@ function parseSrtToSegments(srtContent) {
     const text = lines.slice(2).join(' ').trim();
     if (text) segments.push({ start, end, text });
   }
-  return applySegmentStartDelay(segments, CAPTION_START_DELAY_SEC);
+  return segments;
 }
 
 function tryBuildSegmentsFromWhisperJson(jsonObj) {
@@ -282,10 +263,11 @@ function tryBuildSegmentsFromWhisperJson(jsonObj) {
 
   const MAX_SEGMENT_DURATION_SEC = 3.2;
   const shifted = filtered.map((s) => ({
-    ...s,
+    start: s.start,
     end: Math.min(s.end, s.start + MAX_SEGMENT_DURATION_SEC),
+    text: s.text,
   }));
-  return applySegmentStartDelay(shifted, CAPTION_START_DELAY_SEC);
+  return shifted;
 }
 
 app.post('/transcribe', express.json(), async (req, res) => {
