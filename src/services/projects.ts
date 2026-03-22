@@ -32,11 +32,27 @@ export interface ProjectAudioTrack {
   muted?: boolean;
 }
 
+/** Texto sobre o vídeo (guardado no projeto). */
+export interface ProjectTextOverlay {
+  id: string;
+  text: string;
+  xPercent: number;
+  yPercent: number;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  fontWeight: 400 | 700;
+  timelineStart: number;
+  timelineEnd: number;
+}
+
 export interface ProjectData {
   clips: ProjectClip[];
   audioTracks: ProjectAudioTrack[];
   filterType?: string;
   filterIntensity?: number;
+  /** Camadas de texto no editor (timeline global). */
+  textOverlays?: ProjectTextOverlay[];
 }
 
 export interface Project {

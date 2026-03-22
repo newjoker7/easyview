@@ -3,8 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Scissors, CircleOff, Image, Palette, Contrast, Sparkles, Download, Upload, Loader2, CheckCircle, X, Trash2, GripVertical, Layout, Type, ZoomIn, ZoomOut } from 'lucide-react';
 import { LegendaModal, getCaptionStyleProps } from './LegendaModal';
 import { CaptionOverlay } from './CaptionOverlay';
+import { TextOverlayLayer } from './TextOverlayLayer';
+import { TextEditorPanel } from './TextEditorPanel';
 import { uploadFile, exportVideoOnServer, convertWebmToMp4 } from '../services/api';
 import type { ProjectData } from '../services/projects';
+import type { EditorTextOverlay } from '../types/editorText';
 
 export type FilterType = 'none' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'blur-bg-band-h' | 'blur-bg-band-v';
 
@@ -143,21 +146,42 @@ function VideoEditorInner(
   const playAllAudioAtTimeRef = useRef<(t: number, play: boolean) => void>(() => {});
   const [selectedTrack, setSelectedTrack] = useState<'video' | string>('video');
   const [selectedClip, setSelectedClip] = useState<{ track: 'video' | 'audio' | null; trackId?: string; clipId?: string }>({ track: null });
+  const [textOverlays, setTextOverlays] = useState<EditorTextOverlay[]>(() => {
+    const raw = initialData?.textOverlays;
+    return Array.isArray(raw) ? (raw as EditorTextOverlay[]).map((t) => ({ ...t })) : [];
+  });
+  const textOverlaysRef = useRef(textOverlays);
+  textOverlaysRef.current = textOverlays;
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [rightAsideTab, setRightAsideTab] = useState<'effects' | 'text'>('effects');
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   // undo history
-  const historyRef = useRef<Array<{ clips: Clip[]; audioTracks: Array<{ id: string; name: string; clips: Clip[]; muted?: boolean }>; currentTime: number; selectedClip: any; selectedTrack: any }>>([]);
+  const historyRef = useRef<
+    Array<{
+      clips: Clip[];
+      audioTracks: Array<{ id: string; name: string; clips: Clip[]; muted?: boolean }>;
+      textOverlays: EditorTextOverlay[];
+      currentTime: number;
+      selectedClip: { track: 'video' | 'audio' | null; trackId?: string; clipId?: string };
+      selectedTrack: 'video' | string;
+      selectedTextId: string | null;
+    }>
+  >([]);
   const pushHistory = useCallback(() => {
     const snapshot = {
       clips: JSON.parse(JSON.stringify(clips)),
       audioTracks: JSON.parse(JSON.stringify(audioTracks)),
+      textOverlays: JSON.parse(JSON.stringify(textOverlays)),
       currentTime,
       selectedClip,
       selectedTrack,
+      selectedTextId,
     };
     historyRef.current.push(snapshot);
     // limitar histórico de undo para no máximo 4 estados
     while (historyRef.current.length > 4) historyRef.current.shift();
     onDirty?.();
-  }, [clips, audioTracks, currentTime, selectedClip, selectedTrack, onDirty]);
+  }, [clips, audioTracks, textOverlays, currentTime, selectedClip, selectedTrack, selectedTextId, onDirty]);
 
   const undo = useCallback(() => {
     const snap = historyRef.current.pop();
@@ -169,6 +193,8 @@ function VideoEditorInner(
     setCurrentTime(snap.currentTime);
     setSelectedClip(snap.selectedClip ?? { track: null });
     setSelectedTrack(snap.selectedTrack ?? 'video');
+    setTextOverlays(JSON.parse(JSON.stringify(snap.textOverlays ?? [])));
+    setSelectedTextId(snap.selectedTextId ?? null);
     // se estiver tocando durante o undo, pausar vídeo e TODAS as trilhas de áudio
     if (isPlayingRef.current) {
       setIsPlaying(false);
@@ -355,6 +381,57 @@ function VideoEditorInner(
   }, [audioTracks]);
 
   const timelineDuration = Math.max(totalDuration, audioTotal);
+
+  const updateTextPositionOnly = useCallback(
+    (id: string, patch: Partial<Pick<EditorTextOverlay, 'xPercent' | 'yPercent'>>) => {
+      setTextOverlays((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+    },
+    []
+  );
+
+  const handleTextDragHistorySnapshot = useCallback(() => {
+    pushHistory();
+  }, [pushHistory]);
+
+  const addTextOverlay = useCallback(
+    (partial: Omit<EditorTextOverlay, 'id'>) => {
+      pushHistory();
+      const id = `text-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      setTextOverlays((prev) => [...prev, { ...partial, id }]);
+      setSelectedTextId(id);
+      setRightAsideTab('text');
+      onDirty?.();
+    },
+    [pushHistory, onDirty]
+  );
+
+  const updateTextOverlay = useCallback(
+    (id: string, patch: Partial<EditorTextOverlay>) => {
+      pushHistory();
+      setTextOverlays((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          const next = { ...o, ...patch };
+          if (next.timelineEnd <= next.timelineStart) {
+            next.timelineEnd = next.timelineStart + 0.1;
+          }
+          return next;
+        })
+      );
+      onDirty?.();
+    },
+    [pushHistory, onDirty]
+  );
+
+  const deleteTextOverlay = useCallback(
+    (id: string) => {
+      pushHistory();
+      setTextOverlays((prev) => prev.filter((o) => o.id !== id));
+      setSelectedTextId((s) => (s === id ? null : s));
+      onDirty?.();
+    },
+    [pushHistory, onDirty]
+  );
 
   const startTimes = useMemo(() => {
     const st: number[] = [];
@@ -598,7 +675,19 @@ function VideoEditorInner(
         })),
         filterType: filterType || 'none',
         filterIntensity: filterIntensity ?? 100,
-      } as ProjectData;
+        textOverlays: (textOverlaysRef.current || []).map((t) => ({
+          id: t.id,
+          text: t.text,
+          xPercent: t.xPercent,
+          yPercent: t.yPercent,
+          fontFamily: t.fontFamily,
+          fontSize: t.fontSize,
+          color: t.color,
+          fontWeight: t.fontWeight,
+          timelineStart: t.timelineStart,
+          timelineEnd: t.timelineEnd,
+        })),
+      } as unknown as ProjectData;
     },
     loadProjectData: (data: ProjectData) => {
       const loadedClips = (data.clips || []).map((c) => ({
@@ -623,6 +712,9 @@ function VideoEditorInner(
       setIsPlaying(false);
       setSelectedClip({ track: null });
       setSelectedTrack('video');
+      const loadedText = Array.isArray(data.textOverlays) ? data.textOverlays : [];
+      setTextOverlays(loadedText as EditorTextOverlay[]);
+      setSelectedTextId(null);
       historyRef.current = [];
       if (loadedClips.length > 0 && videoRef.current) {
         hasInitialDurationRef.current = false;
@@ -642,7 +734,7 @@ function VideoEditorInner(
     addVideoFile: loadVideoFile,
     addAudioFile,
     hasVideo: () => clipsRef.current.length > 0,
-  }), [clips, audioTracks, filterType, filterIntensity, loadVideoFile, addAudioFile]);
+  }), [clips, audioTracks, filterType, filterIntensity, textOverlays, loadVideoFile, addAudioFile]);
 
   // Generate base thumbnails for video clips (data URLs) — one per BASE_THUMB_STEP (5s)
   useEffect(() => {
@@ -1973,7 +2065,10 @@ function VideoEditorInner(
   );
 
   // Context menu handlers
-  const openContextMenu = (e: React.MouseEvent, params: { track: 'video' | 'audio'; trackId?: string; clipId: string }) => {
+  const openContextMenu = (
+    e: { preventDefault(): void; clientX: number; clientY: number },
+    params: { track: 'video' | 'audio'; trackId?: string; clipId: string }
+  ) => {
     e.preventDefault();
     setContextMenu({
       visible: true,
@@ -2149,10 +2244,17 @@ function VideoEditorInner(
       <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
         <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 min-w-0">
           <div
+            ref={previewContainerRef}
             className={`relative w-full max-w-4xl aspect-video bg-zinc-900 rounded-xl overflow-hidden shadow-xl border border-zinc-800 transition-all duration-200 ${isDragOver ? 'ring-2 ring-rose-500 ring-offset-2 ring-offset-zinc-950 border-rose-500/50' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            onPointerDown={(e) => {
+              const el = e.target as HTMLElement;
+              if (!el.closest?.('[data-text-overlay-item]')) {
+                setSelectedTextId(null);
+              }
+            }}
           >
             {blurBgBandActive && (
               <video
@@ -2225,6 +2327,17 @@ function VideoEditorInner(
                 videoRef={videoRef}
                 clip={playingClipObj}
                 styleProps={getCaptionStyleProps(playingClipObj.captionStyle!)}
+              />
+            )}
+            {textOverlays.length > 0 && (
+              <TextOverlayLayer
+                containerRef={previewContainerRef}
+                overlays={textOverlays}
+                currentTime={currentTime}
+                selectedId={selectedTextId}
+                onSelect={setSelectedTextId}
+                onUpdate={updateTextPositionOnly}
+                onDragStart={handleTextDragHistorySnapshot}
               />
             )}
             <AnimatePresence>
@@ -2419,7 +2532,9 @@ function VideoEditorInner(
                           exit={{ opacity: 0 }}
                           transition={{ type: 'spring', stiffness: 400, damping: 35 }}
                           draggable={clips.length > 1}
-                          onDragStart={(e) => clips.length > 1 && handleClipDragStart(e, i)}
+                          onDragStart={(e) =>
+                            clips.length > 1 && handleClipDragStart(e as unknown as React.DragEvent, i)
+                          }
                           onClick={(e) => { e.stopPropagation(); setSelectedClip({ track: 'video', clipId: clip.id }); setSelectedTrack('video'); }}
                           onContextMenu={(e) => openContextMenu(e, { track: 'video', clipId: clip.id })}
                           className={`absolute inset-y-1 rounded-md bg-sky-800/60 hover:bg-sky-700/70 border border-sky-600/50 shadow-sm flex items-center justify-between gap-0.5 pr-0.5 group z-10 ${clips.length > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} ${selectedClip.track === 'video' && selectedClip.clipId === clip.id ? 'ring-2 ring-orange-500' : ''}`}
@@ -2470,6 +2585,37 @@ function VideoEditorInner(
                 </>
               )}
             </motion.div>
+            {textOverlays.length > 0 && timelineDuration > 0 && (
+              <div className="relative mt-1.5 h-10 shrink-0 rounded-xl border border-amber-800/45 bg-amber-950/35 overflow-hidden shadow-inner">
+                {textOverlays.map((tx) => {
+                  const left = (tx.timelineStart / timelineDuration) * 100;
+                  const width = Math.max(
+                    0.8,
+                    ((tx.timelineEnd - tx.timelineStart) / timelineDuration) * 100
+                  );
+                  return (
+                    <button
+                      key={tx.id}
+                      type="button"
+                      title={tx.text || 'Texto'}
+                      className={`absolute inset-y-1 rounded-md bg-amber-800/55 hover:bg-amber-700/65 border border-amber-600/45 flex items-center px-1 overflow-hidden z-10 ${
+                        selectedTextId === tx.id ? 'ring-2 ring-orange-500' : ''
+                      }`}
+                      style={{ left: `${left}%`, width: `${width}%` }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTextId(tx.id);
+                        setRightAsideTab('text');
+                      }}
+                    >
+                      <span className="truncate text-[10px] font-medium text-amber-100/95 w-full text-left">
+                        {tx.text?.trim() ? tx.text.slice(0, 24) : 'Texto'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {/* Continue playback overlay (shows when autoplay blocked) */}
             <AnimatePresence>
               {showContinueOverlay && (
@@ -2597,11 +2743,55 @@ function VideoEditorInner(
           </footer>
         </main>
 
-        {/* Barra lateral Efeitos */}
-        <aside className="w-full lg:w-64 shrink-0 border-t lg:border-t-0 lg:border-l border-zinc-700/80 bg-zinc-900/90 flex flex-col p-4 gap-4">
-          <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+        {/* Barra lateral: Efeitos + Texto (estilo CapCut) */}
+        <aside className="w-full lg:w-64 shrink-0 border-t lg:border-t-0 lg:border-l border-zinc-700/80 bg-zinc-900/90 flex flex-col p-4 gap-4 min-h-0 overflow-hidden">
+          <div className="flex rounded-lg bg-zinc-800/90 p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setRightAsideTab('effects')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-semibold transition ${
+                rightAsideTab === 'effects'
+                  ? 'bg-zinc-700 text-zinc-100 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Sparkles size={15} className="text-rose-400/90 shrink-0" />
+              Efeitos
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightAsideTab('text')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-semibold transition ${
+                rightAsideTab === 'text'
+                  ? 'bg-zinc-700 text-zinc-100 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Type size={15} className="text-amber-400/90 shrink-0" />
+              Texto
+            </button>
+          </div>
+          {rightAsideTab === 'text' ? (
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-2 mb-3">
+                <Type size={18} className="text-amber-400/80" />
+                Biblioteca de texto
+              </h2>
+              <TextEditorPanel
+                timelineDuration={timelineDuration}
+                overlays={textOverlays}
+                selectedId={selectedTextId}
+                onSelect={setSelectedTextId}
+                onAdd={addTextOverlay}
+                onUpdate={updateTextOverlay}
+                onDelete={deleteTextOverlay}
+              />
+            </div>
+          ) : (
+            <>
+          <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-2 shrink-0">
             <Sparkles size={18} className="text-rose-400/80" />
-            Efeitos
+            Filtros no vídeo
           </h2>
           <div className="flex flex-wrap gap-2">
             {(
@@ -2673,6 +2863,8 @@ function VideoEditorInner(
               aria-label="Intensidade do filtro"
             />
           </div>
+            </>
+          )}
         </aside>
       </div>
 
