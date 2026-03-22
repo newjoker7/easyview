@@ -1876,12 +1876,39 @@ function VideoEditorInner(
     const duration = clip.end - clip.start;
     const toTrack = audioTracks[toIdx];
     const chosenStart = findNonOverlappingStart(toTrack.clips, desiredStart, duration, Math.max(timelineDuration, desiredStart + duration + 1), clip.id);
+    const emptiedTrackIds: string[] = [];
     setAudioTracks((prev) => {
+      emptiedTrackIds.length = 0;
       const next = prev.map((t) => ({ ...t, clips: [...t.clips] }));
-      const srcIdx = next[fromIdx].clips.findIndex((c) => c.id === clip.id);
-      if (srcIdx !== -1) next[fromIdx].clips.splice(srcIdx, 1);
-      next[toIdx].clips.push({ ...clip, offset: chosenStart });
-      return next;
+      const fromIdx2 = next.findIndex((t) => t.id === fromTrackId);
+      const toIdx2 = next.findIndex((t) => t.id === toTrackId);
+      if (fromIdx2 === -1 || toIdx2 === -1) return prev;
+      const srcIdx = next[fromIdx2].clips.findIndex((c) => c.id === clip.id);
+      if (srcIdx !== -1) next[fromIdx2].clips.splice(srcIdx, 1);
+      next[toIdx2].clips.push({ ...clip, offset: chosenStart });
+      next[toIdx2].clips = normalizeTrackOffsets(next[toIdx2].clips);
+      for (const t of next) {
+        if (t.clips.length === 0) emptiedTrackIds.push(t.id);
+      }
+      for (const id of emptiedTrackIds) {
+        const el = audioElsRef.current[id];
+        if (el) {
+          try {
+            el.pause();
+          } catch {}
+          el.src = '';
+          delete audioElsRef.current[id];
+        }
+      }
+      return next.filter((t) => t.clips.length > 0);
+    });
+    setSelectedClip((s) => {
+      if (s.track !== 'audio' || !s.trackId) return s;
+      if (emptiedTrackIds.includes(s.trackId)) {
+        if (s.clipId === clip.id) return { track: 'audio', trackId: toTrackId, clipId: clip.id };
+        return { track: null, trackId: undefined, clipId: undefined };
+      }
+      return s;
     });
     setDraggingAudio(null);
     setDragGhost(null);
@@ -2015,12 +2042,14 @@ function VideoEditorInner(
         setIsPlaying(false);
       }
     } else {
+      let removedTrackId: string | null = null;
       setAudioTracks((prev) => {
         const tIdx = prev.findIndex((t) => t.id === trackId);
         if (tIdx === -1) return prev;
         const trackObj = prev[tIdx];
         const newClips = trackObj.clips.filter((c) => c.id !== clipId);
         if (newClips.length === 0) {
+          removedTrackId = trackObj.id;
           const el = audioElsRef.current[trackObj.id];
           if (el) {
             try { el.pause(); } catch {}
@@ -2033,6 +2062,14 @@ function VideoEditorInner(
         next[tIdx] = { ...trackObj, clips: newClips };
         return next;
       });
+      if (removedTrackId) {
+        setSelectedClip((s) =>
+          s.track === 'audio' && s.trackId === removedTrackId
+            ? { track: null, trackId: undefined, clipId: undefined }
+            : s
+        );
+        setSelectedTrack((st) => (st === removedTrackId ? 'video' : st));
+      }
     }
     setContextMenu((c) => ({ ...c, visible: false }));
   };

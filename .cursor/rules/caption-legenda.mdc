@@ -9,10 +9,10 @@ alwaysApply: false
 ## Contrato de tempo
 
 - **Guardar em tempo relativo ao clipe:** 0 = início do clipe. Normalizar com `normalizeToClipRelative()` na extração (LegendaModal).
-- **Exibição:** `timeInClip = video.currentTime - clip.start`. Mostrar texto só quando `timeInClip` está em `[seg.start, seg.end)`.
+- **Exibição:** `timeInClip = video.currentTime - clip.start`. Mostrar texto só quando `timeInClip` está em `[seg.start, seg.end)`; fora de todos os segmentos (pausas) a legenda fica em branco.
 
 ## Sincronização
 
-- **CaptionOverlay:** listener `timeupdate` no vídeo; compara `timeInClip` com `clip.captionSegments`; sem offset no início.
-- **captionSegments.ts:** apenas `normalizeToClipRelative()` para normalizar resposta da API.
-- **server/index.js:** `/transcribe` devolve segmentos tal como Whisper/SRT (sem atraso aplicado).
+- **CaptionOverlay:** usa um loop com `requestAnimationFrame` (`tick`) para ler `video.currentTime` e, a cada frame, calcular `timeInClip` e escolher o segmento ativo (`find((s) => timeInClip >= s.start && timeInClip < s.end)`).
+- **captionSegments.ts:** `normalizeToClipRelative()` para normalizar resposta da API para tempo relativo ao clipe.
+- **server/index.js:** `/transcribe` extrai o áudio do trecho com ffmpeg, tenta primeiro `faster-whisper` via `transcribe_faster_whisper.py` (Python) para obter `{ segments }`; se falhar, usa `nodejs-whisper` (JSON ou SRT) e converte com `tryBuildSegmentsFromWhisperJson`/`parseSrtToSegments`.

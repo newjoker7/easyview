@@ -13,9 +13,9 @@ Editor de vídeo em React + TypeScript + Vite. Principais funcionalidades: timel
 
 ## Legendas (captions)
 
-- **Extração:** `LegendaModal` chama `transcribeVideo(clipUrl, clipStart, clipEnd)`; os segmentos são normalizados para **tempo relativo ao clipe** (0 = início do clipe) antes de guardar.
-- **Exibição:** `CaptionOverlay` (`src/components/CaptionOverlay.tsx`) usa a API nativa **TextTrack + VTTCue**: cria um track no vídeo, adiciona cues com `clip.start + seg.start` / `clip.start + seg.end` (tempo no ficheiro), e subscreve o evento `cuechange` para mostrar o texto. A sincronização é feita pelo browser, não por RAF.
-- **Contrato:** `captionSegments` guardados sempre em tempo relativo ao clipe. Ver `CaptionSegment` em `src/services/api.ts`.
+- **Extração:** `LegendaModal` chama `transcribeVideo(clipUrl, clipStart, clipEnd)`; o servidor extrai o áudio do trecho e tenta primeiro **faster-whisper** (Python). Se não estiver disponível, usa **nodejs-whisper** (JSON ou SRT). A resposta `{ segments }` é normalizada para **tempo relativo ao clipe** (0 = início do clipe) antes de guardar.
+- **Exibição:** `CaptionOverlay` (`src/components/CaptionOverlay.tsx`) usa um loop com `requestAnimationFrame` para ler `video.currentTime`, calcula `timeInClip = video.currentTime - clip.start` e mostra texto **apenas** quando `timeInClip` está dentro de um segmento `[seg.start, seg.end)`. Fora de qualquer segmento (pausas) não mostra nada.
+- **Contrato:** `captionSegments` guardados sempre em tempo relativo ao clipe. Ver `CaptionSegment` em `src/services/api.ts` e `normalizeToClipRelative` em `src/services/captionSegments.ts`.
 
 ## Deploy
 
